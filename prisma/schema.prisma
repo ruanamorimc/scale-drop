@@ -14,19 +14,44 @@ datasource db {
 }
 
 model User {
-  id            String    @id
+  id            String       @id
   name          String
   email         String
-  emailVerified Boolean   @default(false)
+  emailVerified Boolean      @default(false)
+  phoneNumber   String?
   image         String?
   role          String?
-  createdAt     DateTime  @default(now())
-  updatedAt     DateTime  @updatedAt
-  sessions      Session[]
-  accounts      Account[]
+
+  // Status de acesso baseado em assinatura
+  plan          String    @default("FREE")
+  accessStatus  AccessStatus @default(PENDING)
+
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
+
+  // Relacionamentos Better Auth
+  sessions Session[]
+  accounts Account[]
+
+  // Relacionamentos SaaS
+  subscription          Subscription?
+  Subscriptionhistory   SubscriptionHistory[]
+  wallet                Wallet?
+  transactions          Transaction[]
+  suppliers             Supplier[]
+  storeIntegrations     StoreIntegration[]
+  products              Product[]
+  orders                Order[]
 
   @@unique([email])
+  @@index([accessStatus])
   @@map("user")
+}
+
+enum AccessStatus {
+  PENDING // Assinatura pendente
+  ACTIVE // Assinatura ativa
+  BLOCKED // Assinatura expirada/cancelada ou sem assinatura
 }
 
 model Session {
@@ -75,4 +100,438 @@ model Verification {
 
   @@index([identifier])
   @@map("verification")
+}
+
+// ============================================
+// ASSINATURA E ACESSO
+// ============================================
+
+model Subscription {
+  id          String @id @default(cuid())
+  userId      String @unique     // Garante 1 assinatura por usuário
+  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Dados do checkout externo
+  provider       SubscriptionProvider     // Kirvano, PerfectPay, Hubla, Ticto
+  externalId     String                   // ID da assinatura no sistema externo
+  externalPlanId String?                  // ID do plano no sistema externo
+
+  // Status da assinatura
+  plan   String                           // Ex: "PRO", "ENTERPRISE"
+  status SubscriptionStatus @default(PENDING)
+
+  // Período da assinatura
+  startDate  DateTime
+  endDate    DateTime?           // Se null = vitalício. Se data = renovação.
+  canceledAt DateTime?          // Se preenchido, o usuário pediu cancelamento
+
+  // Dados do webhook
+  lastWebhookEvent String?     // Último evento recebido
+  lastWebhookAt    DateTime?
+
+  // Metadados - Dados extras que o gateway mandar
+  metadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([externalId])
+  @@index([status])
+  @@index([endDate])
+  @@map("subscription")
+}
+
+enum SubscriptionProvider {
+  KIRVANO
+  PERFECTPAY
+  HUBLA
+  TICTO
+}
+
+enum SubscriptionStatus {
+  PENDING // Aguardando confirmação do checkout
+  ACTIVE // Assinatura ativa
+  EXPIRED // Assinatura expirada
+  CANCELED // Assinatura cancelada
+  SUSPENDED // Assinatura suspensa
+}
+
+// ============================================
+// HISTORICO DO USUÁRIO | LOG
+// ============================================
+
+model SubscriptionHistory {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // O Evento (O que aconteceu?)
+  event     String   // Ex: "CREATED", "RENEWED", "UPGRADED", "CANCELED", "PAYMENT_FAILED"
+  
+  // Detalhes do momento
+  plan      String   // Qual era o plano nesse momento
+  status    String   // Status resultante (ACTIVE, CANCELED)
+
+  // Financeiro (Opcional, mas bom ter)
+  amount    Float?   // Quanto ele pagou
+  currency  String?  @default("BRL")
+  
+  
+  createdAt DateTime @default(now()) // A data exata que o evento ocorreu
+
+  @@index([userId])
+  @@map("subscription_history")
+}
+
+// ============================================
+// WALLET E TRANSAÇÕES
+// ============================================
+
+model Wallet {
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  // Saldo atual (em centavos para precisão)
+  balance Decimal @default(0) @db.Decimal(12, 2)
+
+  // Controle de bloqueio
+  isBlocked     Boolean @default(false)
+  blockedReason String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("wallet")
+}
+
+model Transaction {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  // Tipo e valor
+  type         TransactionType
+  amount       Decimal         @db.Decimal(12, 2) // Sempre positivo, type indica se é crédito ou débito
+  balanceAfter Decimal         @db.Decimal(12, 2) // Saldo após a transação
+
+  // Descrição e referência
+  description   String
+  referenceId   String? // ID externo (ex: ID do pedido, ID do pagamento)
+  referenceType String? // Tipo de referência (ORDER_PAYMENT, MANUAL_ADJUSTMENT, etc)
+
+  // Metadados
+  metadata Json?
+
+  createdAt DateTime @default(now())
+
+  @@index([userId])
+  @@index([type])
+  @@index([referenceId, referenceType])
+  @@index([createdAt])
+  @@map("transaction")
+}
+
+enum TransactionType {
+  CREDIT // Entrada de dinheiro
+  DEBIT // Saída de dinheiro
+}
+
+// ============================================
+// FORNECEDORES
+// ============================================
+
+model Supplier {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  // Dados básicos
+  name     String
+  email    String?
+  phone    String?
+  document String? // CNPJ/CPF
+
+  // Endereço
+  address String?
+  city    String?
+  state   String?
+  zipCode String?
+  country String? @default("BR")
+
+  // Status e configurações
+  isActive Boolean @default(true)
+  notes    String?
+
+  // Relacionamentos
+  products      Product[]
+  orderPayments OrderPayment[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([isActive])
+  @@map("supplier")
+}
+
+// ============================================
+// INTEGRAÇÕES COM LOJAS
+// ============================================
+
+model StoreIntegration {
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  // Tipo de loja
+  platform StorePlatform
+
+  // Dados da loja
+  storeName String
+  storeId   String // ID da loja na plataforma
+  storeUrl  String?
+
+  // Credenciais (criptografadas)
+  accessToken    String // Token de acesso da API
+  refreshToken   String?
+  tokenExpiresAt DateTime?
+
+  // Status da integração
+  isActive    Boolean   @default(true)
+  isConnected Boolean   @default(false)
+  lastSyncAt  DateTime?
+
+  // Configurações
+  autoSync     Boolean @default(true)
+  syncInterval Int? // Intervalo em minutos
+
+  // Metadados
+  metadata Json?
+
+  // Relacionamentos
+  orders Order[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, platform, storeId])
+  @@index([userId])
+  @@index([platform])
+  @@index([isActive])
+  @@map("store_integration")
+}
+
+enum StorePlatform {
+  SHOPIFY
+  MERCADO_LIVRE
+  SHOPEE
+}
+
+// ============================================
+// PRODUTOS
+// ============================================
+
+model Product {
+  id         String    @id @default(cuid())
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  supplierId String?
+  supplier   Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
+
+  // Dados básicos
+  name    String
+  sku     String? // SKU do produto
+  barcode String? // Código de barras
+
+  // Preços
+  costPrice Decimal? @db.Decimal(10, 2) // Preço de custo (fornecedor)
+  salePrice Decimal? @db.Decimal(10, 2) // Preço de venda sugerido
+
+  // Estoque
+  stockQuantity Int  @default(0)
+  minStock      Int? // Estoque mínimo
+
+  // Descrição e imagens
+  description String?
+  images      String[] // URLs das imagens
+
+  // Categorias e tags
+  category String?
+  tags     String[]
+
+  // Status
+  isActive    Boolean @default(true)
+  isPublished Boolean @default(false) // Se está publicado nas lojas
+
+  // Dados do fornecedor
+  supplierSku String? // SKU no fornecedor
+  supplierUrl String? // URL do produto no fornecedor
+
+  // Relacionamentos
+  orderItems OrderItem[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@index([supplierId])
+  @@index([sku])
+  @@index([isActive])
+  @@index([isPublished])
+  @@map("product")
+}
+
+// ============================================
+// PEDIDOS
+// ============================================
+
+model Order {
+  id                 String           @id @default(cuid())
+  userId             String
+  user               User             @relation(fields: [userId], references: [id], onDelete: Restrict)
+  storeIntegrationId String
+  storeIntegration   StoreIntegration @relation(fields: [storeIntegrationId], references: [id], onDelete: Restrict)
+
+  // Dados do pedido na loja
+  externalOrderId String // ID do pedido na plataforma (Shopify, ML, etc)
+  orderNumber     String? // Número do pedido para exibição
+
+  // Status do pedido
+  status OrderStatus @default(PENDING)
+
+  // Dados do cliente
+  customerName     String
+  customerEmail    String?
+  customerPhone    String?
+  customerDocument String?
+
+  // Endereço de entrega
+  shippingAddress String
+  shippingCity    String?
+  shippingState   String?
+  shippingZipCode String?
+  shippingCountry String? @default("BR")
+
+  // Valores
+  subtotal     Decimal @db.Decimal(10, 2)
+  shippingCost Decimal @default(0) @db.Decimal(10, 2)
+  discount     Decimal @default(0) @db.Decimal(10, 2)
+  total        Decimal @db.Decimal(10, 2)
+
+  // Informações de pagamento
+  paymentMethod String?
+  paymentStatus PaymentStatus @default(PENDING)
+
+  // Informações de envio
+  shippingMethod String?
+  trackingNumber String?
+  shippedAt      DateTime?
+  deliveredAt    DateTime?
+
+  // Itens do pedido
+  items OrderItem[]
+
+  // Pagamentos para fornecedores
+  payments OrderPayment[]
+
+  // Metadados
+  metadata Json? // Dados adicionais da loja
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([storeIntegrationId, externalOrderId])
+  @@index([userId])
+  @@index([storeIntegrationId])
+  @@index([externalOrderId])
+  @@index([status])
+  @@index([paymentStatus])
+  @@index([createdAt])
+  @@map("order")
+}
+
+enum OrderStatus {
+  PENDING // Aguardando processamento
+  PROCESSING // Em processamento
+  CONFIRMED // Confirmado
+  PREPARING // Preparando envio
+  SHIPPED // Enviado
+  DELIVERED // Entregue
+  CANCELLED // Cancelado
+  RETURNED // Devolvido
+}
+
+enum PaymentStatus {
+  PENDING // Aguardando pagamento
+  PAID // Pago
+  PARTIAL // Parcialmente pago
+  REFUNDED // Reembolsado
+  FAILED // Falhou
+}
+
+model OrderItem {
+  id        String   @id @default(cuid())
+  orderId   String
+  order     Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  productId String?
+  product   Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  // Dados do item (podem ser diferentes do produto se produto foi deletado)
+  name       String
+  sku        String?
+  quantity   Int
+  unitPrice  Decimal @db.Decimal(10, 2)
+  totalPrice Decimal @db.Decimal(10, 2)
+
+  // Dados do fornecedor (se aplicável)
+  supplierId  String?
+  supplierSku String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([productId])
+  @@map("order_item")
+}
+
+// ============================================
+// PAGAMENTOS PARA FORNECEDORES
+// ============================================
+
+model OrderPayment {
+  id         String   @id @default(cuid())
+  orderId    String
+  order      Order    @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  supplierId String
+  supplier   Supplier @relation(fields: [supplierId], references: [id], onDelete: Restrict)
+
+  // Valor do pagamento
+  amount Decimal @db.Decimal(10, 2)
+
+  // Status do pagamento
+  status PaymentStatus @default(PENDING)
+
+  // Informações do pagamento
+  paymentMethod String? // Método usado (wallet, pix, etc)
+  paymentDate   DateTime?
+
+  // Referência da transação no wallet
+  transactionId String? // ID da transação no wallet (se pago via wallet)
+
+  // Metadados
+  notes    String?
+  metadata Json?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([orderId])
+  @@index([supplierId])
+  @@index([status])
+  @@index([paymentDate])
+  @@map("order_payment")
 }

@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Controller, useForm } from "react-hook-form";
-import { z } from "zod";
 
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -18,34 +17,17 @@ import {
   FieldSeparator,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { passwordSchema } from "@/lib/validation";
+
+// 👇 Importando o Schema separado
+import { signUpSchema, type SignUpFormValues } from "@/schemas/auth-schema";
 import { authClient } from "@/lib/auth-client";
 import { toast } from "sonner";
-
-const signUpSchema = z
-  .object({
-    name: z
-      .string()
-      .min(4, { message: "O nome deve ter pelo menos 4 caracteres" }),
-    email: z.email({ message: "Por favor, insira um email válido" }),
-    password: passwordSchema,
-    passwordConfirmation: z
-      .string()
-      .min(8, { message: "Por favor, confirme sua senha" }),
-  })
-  .refine((data) => data.password === data.passwordConfirmation, {
-    message: "As senhas não coincidem",
-    path: ["passwordConfirmation"],
-  });
-
-type SignUpFormValues = z.infer<typeof signUpSchema>;
 
 export function SignUpForm({
   className,
   ...props
 }: React.ComponentProps<"form">) {
   const [error, setError] = useState<string | null>(null);
-
   const router = useRouter();
 
   const form = useForm<SignUpFormValues>({
@@ -53,41 +35,53 @@ export function SignUpForm({
     defaultValues: {
       name: "",
       email: "",
+      phone: "", // 👇 Inicializa vazio
       password: "",
       passwordConfirmation: "",
     },
   });
 
-  async function onSubmit(formData: SignUpFormValues) {
+  async function onSubmit(values: SignUpFormValues) {
     setError(null);
 
     const { data, error } = await authClient.signUp.email(
       {
-        email: formData.email,
-        password: formData.password,
-        name: formData.name,
+        email: values.email,
+        password: values.password,
+        name: values.name,
+        // 👇 Enviando o telefone (Mapeando 'phone' do form para 'phoneNumber' do Auth)
+        phoneNumber: values.phone,
         callbackURL: "/email-verified",
       },
       {
-        onRequest: (ctx) => {
-          //toast.loading("Creating your account...", { id: ctx.requestId });
-          //show loading
+        onRequest: () => {
+          // Opcional: mostrar loading global
         },
-        onSuccess: (ctx) => {
-          //redirect to the dashboard or sign in page
-          console.log("CONTA CRIADA COM SUCESSO: ", ctx);
+        onSuccess: () => {
+          toast.success("Conta criada com sucesso!");
           router.replace("/dashboard");
         },
         onError: (ctx) => {
-          // display the error message
-          console.log("ERRO AO CRIAR CONTA");
-          console.log(ctx);
+          console.log("ERRO AO CRIAR CONTA", ctx);
+          setError(ctx.error.message || "Erro ao criar conta");
         },
       },
     );
   }
+  async function handleSocialSignIn(provider: "google") {
+    setError(null);
 
-  const loading = form.formState.isSubmitting;
+    const { error } = await authClient.signIn.social({
+      provider,
+      callbackURL: "/dashboard",
+    });
+
+    setLoading(false);
+
+    if (error) {
+      setError(error.message || "Algo deu errado");
+    }
+  }
 
   return (
     <form
@@ -102,6 +96,8 @@ export function SignUpForm({
             Preencha o formulário abaixo para criar sua conta
           </p>
         </div>
+
+        {/* CAMPO NOME */}
         <Controller
           name="name"
           control={form.control}
@@ -113,6 +109,8 @@ export function SignUpForm({
             </Field>
           )}
         />
+
+        {/* CAMPO EMAIL */}
         <Controller
           control={form.control}
           name="email"
@@ -124,21 +122,42 @@ export function SignUpForm({
                 id={field.name}
                 placeholder="email@example.com"
               />
-              <FieldDescription>
-                Usaremos este endereço de e-mail para entrar em contato com
-                você. Não compartilharemos seu e-mail com mais ninguém.
-              </FieldDescription>
               {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
             </Field>
           )}
         />
+
+        {/* 👇 NOVO CAMPO TELEFONE */}
+        <Controller
+          control={form.control}
+          name="phone"
+          render={({ field, fieldState }) => (
+            <Field data-invalid={fieldState.invalid}>
+              <FieldLabel htmlFor={field.name}>Telefone</FieldLabel>
+              <Input
+                {...field}
+                id={field.name}
+                placeholder="(00) 00000-0000"
+                type="tel" // Ajuda no mobile a abrir teclado numérico
+              />
+              {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
+            </Field>
+          )}
+        />
+
+        {/* CAMPO SENHA */}
         <Controller
           control={form.control}
           name="password"
           render={({ field, fieldState }) => (
             <Field data-invalid={fieldState.invalid}>
               <FieldLabel htmlFor={field.name}>Senha</FieldLabel>
-              <Input {...field} id={field.name} placeholder="••••••••" />
+              <Input
+                {...field}
+                id={field.name}
+                placeholder="••••••••"
+                type="password"
+              />
               <FieldDescription>
                 Deve ter no mínimo 8 caracteres.
               </FieldDescription>
@@ -146,16 +165,20 @@ export function SignUpForm({
             </Field>
           )}
         />
+
+        {/* CAMPO CONFIRMAR SENHA */}
         <Controller
           name="passwordConfirmation"
           control={form.control}
           render={({ field, fieldState }) => (
             <Field data-invalid={fieldState.invalid}>
               <FieldLabel htmlFor={field.name}>Confirme sua senha</FieldLabel>
-              <Input {...field} id={field.name} placeholder="••••••••" />
-              <FieldDescription>
-                Por favor, confirme sua senha.
-              </FieldDescription>
+              <Input
+                {...field}
+                id={field.name}
+                placeholder="••••••••"
+                type="password"
+              />
               {fieldState.invalid && <FieldError errors={[fieldState.error]} />}
             </Field>
           )}
@@ -168,21 +191,33 @@ export function SignUpForm({
         )}
 
         <Field>
-          <Button type="submit">Criar conta</Button>
+          <Button type="submit" disabled={form.formState.isSubmitting}>
+            {form.formState.isSubmitting ? "Criando..." : "Criar conta"}
+          </Button>
         </Field>
-        <FieldSeparator>Or continue with</FieldSeparator>
+
+        {/* ... Resto do botão Google e Link de Login ... */}
+        <FieldSeparator>Ou continue com</FieldSeparator>
         <Field>
-          <Button variant="outline" type="button">
-            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24">
+          <Button
+            variant="outline"
+            type="button"
+            onClick={() => handleSocialSignIn("google")}
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 24 24"
+              className="mr-2 size-4"
+            >
               <path
-                d="M12 .297c-6.63 0-12 5.373-12 12 0 5.303 3.438 9.8 8.205 11.385.6.113.82-.258.82-.577 0-.285-.01-1.04-.015-2.04-3.338.724-4.042-1.61-4.042-1.61C4.422 18.07 3.633 17.7 3.633 17.7c-1.087-.744.084-.729.084-.729 1.205.084 1.838 1.236 1.838 1.236 1.07 1.835 2.809 1.305 3.495.998.108-.776.417-1.305.76-1.605-2.665-.3-5.466-1.332-5.466-5.93 0-1.31.465-2.38 1.235-3.22-.135-.303-.54-1.523.105-3.176 0 0 1.005-.322 3.3 1.23.96-.267 1.98-.399 3-.405 1.02.006 2.04.138 3 .405 2.28-1.552 3.285-1.23 3.285-1.23.645 1.653.24 2.873.12 3.176.765.84 1.23 1.91 1.23 3.22 0 4.61-2.805 5.625-5.475 5.92.42.36.81 1.096.81 2.22 0 1.606-.015 2.896-.015 3.286 0 .315.21.69.825.57C20.565 22.092 24 17.592 24 12.297c0-6.627-5.373-12-12-12"
+                d="M12.48 10.92v3.28h7.84c-.24 1.84-.853 3.187-1.787 4.133-1.147 1.147-2.933 2.4-6.053 2.4-4.827 0-8.6-3.893-8.6-8.72s3.773-8.72 8.6-8.72c2.6 0 4.507 1.027 5.907 2.347l2.307-2.307C18.747 1.44 16.133 0 12.48 0 5.867 0 .307 5.387.307 12s5.56 12 12.173 12c3.573 0 6.267-1.173 8.373-3.36 2.16-2.16 2.84-5.213 2.84-7.667 0-.76-.053-1.467-.173-2.053H12.48z"
                 fill="currentColor"
               />
             </svg>
-            Sign up with GitHub
+            Cadastre-se com Google
           </Button>
           <FieldDescription className="px-6 text-center">
-            Already have an account? <a href="#">Sign in</a>
+            Já tem uma conta? <Link href="/login">Entrar</Link>
           </FieldDescription>
         </Field>
       </FieldGroup>
