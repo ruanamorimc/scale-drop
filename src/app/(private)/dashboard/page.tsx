@@ -5,6 +5,8 @@ import { SummaryCards } from "@/components/cards/SummaryCards";
 import { ChartBarStacked } from "@/components/cards/ChartsArea";
 import { SideMetrics } from "@/components/cards/SideMetrics";
 import { CardMetrics } from "@/components/cards/CardMetrics";
+import { RecentOrdersTable } from "@/components/cards/RecentOrdersTable";
+import { TopProducts } from "@/components/cards/TopProducts";
 
 export default async function DashboardPage() {
   const session = await getServerSession();
@@ -37,6 +39,10 @@ export default async function DashboardPage() {
         {/* Direita (Ocupa 1 coluna - 25%) */}
         <div className="lg:col-span-1 space-y-4">
           <SideMetrics />
+          <TopProducts />
+        </div>
+        <div className="lg:col-span-3 space-y-4 ">
+          <RecentOrdersTable />
         </div>
       </div>
     </main>

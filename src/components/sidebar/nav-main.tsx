@@ -19,7 +19,7 @@ const items = [
   },
   {
     title: "Pedidos",
-    url: "#",
+    url: "/orders",
     icon: Package,
   },
   {

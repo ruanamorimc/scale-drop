@@ -8,6 +8,7 @@ import {
   CardTitle,
 } from "../ui/card";
 import { ChartBarInteractive } from "../chart/ChartBarInteractive";
+import { TopProducts } from "./TopProducts";
 
 export function SideMetrics() {
   return (
@@ -31,11 +32,6 @@ export function SideMetrics() {
         <CardFooter className="text-xs text-muted-foreground">
           a mais nesse período
         </CardFooter>
-      </Card>
-
-      {/* Futuro Ranking de Produtos */}
-      <Card className="min-h-[200px] flex items-center justify-center border-dashed">
-        <span className="text-muted-foreground">Ranking de Produtos</span>
       </Card>
     </div>
   );
