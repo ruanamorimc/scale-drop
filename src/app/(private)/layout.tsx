@@ -1,5 +1,5 @@
 import { SidebarProvider } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/sidebar";
+import { AppSidebar } from "@/components/sidebar/Index";
 import { getServerSession } from "@/lib/get-session";
 import { unauthorized } from "next/navigation";
 import { ThemeProvider } from "@/components/providers/ThemeProviders";

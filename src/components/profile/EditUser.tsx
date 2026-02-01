@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/sheet";
 
 // 👇 Importamos o formulário que acabamos de separar
-import { EditUserForm } from "./edit-user-form";
+import { EditUserForm } from "./EditUserForm";
 
 interface EditUserProps {
   user?: {

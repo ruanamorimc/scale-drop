@@ -16,7 +16,7 @@ import { Progress } from "@/components/ui/progress";
 import { BadgeCheck, Candy, Citrus, Shield } from "lucide-react";
 import { Sheet, SheetTrigger } from "@/components/ui/sheet";
 import { Button } from "@/components/ui/button";
-import EditUser from "@/components/profile/edit-user";
+import EditUser from "@/components/profile/EditUser";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { getServerSession } from "@/lib/get-session"; // <--- Importação da sessão
 

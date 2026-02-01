@@ -11,12 +11,12 @@ import {
 const items = [
   {
     title: "Configurações",
-    url: "#",
+    url: "/settings",
     icon: IconSettings,
   },
   {
     title: "Ajuda",
-    url: "#",
+    url: "/help",
     icon: IconHelp,
   },
   {

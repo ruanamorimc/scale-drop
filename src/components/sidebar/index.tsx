@@ -12,9 +12,9 @@ import { getServerSession } from "@/lib/get-session";
 import Image from "next/image";
 import Link from "next/link";
 
-import { NavUser } from "@/components/sidebar/nav-user";
-import { NavMain } from "./nav-main";
-import { NavSecondary } from "./nav-secondary";
+import { NavUser } from "@/components/sidebar/NavUser";
+import { NavMain } from "./NavMain";
+import { NavSecondary } from "./NavSecondary";
 
 export async function AppSidebar({
   ...props
