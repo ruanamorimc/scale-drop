@@ -2,7 +2,15 @@ import type { NextConfig } from "next";
 
 const nextConfig: NextConfig = {
   experimental: {
-    authInterrupts: true,
+    authInterrupts: true, // Mantive sua config existente
+
+    // 👇 ADICIONE ISTO AQUI
+    serverActions: {
+      allowedOrigins: [
+        "localhost:3000",
+        "uncruel-tonda-theoretically.ngrok-free.dev", // O domínio do Ngrok sem https://
+      ],
+    },
   },
   /* config options here */
   // Externaliza módulos Node.js para evitar bundle no cliente

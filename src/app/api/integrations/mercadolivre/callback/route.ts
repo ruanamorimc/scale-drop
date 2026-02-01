@@ -6,7 +6,7 @@ import { updateIntegrationTokens } from "@/services/store-integration"; // Sua f
 export async function GET(request: Request) {
   // 1. Verificar se o usuário está logado
   const session = await auth.api.getSession({
-    headers: await headers()
+    headers: await headers(),
   });
 
   if (!session?.user) {
@@ -33,8 +33,8 @@ export async function GET(request: Request) {
     const response = await fetch("https://api.mercadolibre.com/oauth/token", {
       method: "POST",
       headers: {
-        "accept": "application/json",
-        "content-type": "application/x-www-form-urlencoded"
+        accept: "application/json",
+        "content-type": "application/x-www-form-urlencoded",
       },
       body: params,
     });
@@ -42,18 +42,22 @@ export async function GET(request: Request) {
     const data = await response.json();
 
     if (!response.ok) {
-        console.error("Erro ML Token:", data);
-        throw new Error("Falha ao obter token do ML");
+      console.error("Erro ML Token:", data);
+      throw new Error("Falha ao obter token do ML");
     }
 
     // 4. Salvar no Banco (Usando sua função já pronta!)
     await updateIntegrationTokens(session.user.id, data);
+    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
 
     // 5. Sucesso! Redireciona de volta para a tela de configurações
-    return NextResponse.redirect(new URL("/settings/integrations?success=true", request.url));
-
+    return NextResponse.redirect(
+      `${baseUrl}/settings/integrations?success=true`,
+    );
   } catch (error) {
     console.error("Erro no Callback ML:", error);
-    return NextResponse.redirect(new URL("/settings/integrations?error=true", request.url));
+    return NextResponse.redirect(
+      new URL("/settings/integrations?error=true", request.url),
+    );
   }
 }

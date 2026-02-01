@@ -1,7 +1,31 @@
-import { Separator } from "@/components/ui/separator";
 import { IntegrationsList } from "@/components/settings/IntegrationList";
+import prisma from "@/lib/prisma";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
+import { Separator } from "@/components/ui/separator";
 
-export default function SettingsIntegrationsPage() {
+export default async function IntegrationsPage() {
+  // 1. Pega a sessão do usuário
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+
+  let isMLConnected = false;
+
+  // 2. Se tem usuário, verifica no banco se existe integração do ML
+  if (session?.user?.id) {
+    const integration = await prisma.storeIntegration.findFirst({
+      where: {
+        userId: session.user.id,
+        platform: "MERCADO_LIVRE", // Tem que bater com o ENUM do seu banco
+        isConnected: true,
+      },
+    });
+
+    // Se achou, transforma em true
+    isMLConnected = !!integration;
+  }
+
   return (
     <div className="space-y-6">
       <div>
@@ -10,8 +34,10 @@ export default function SettingsIntegrationsPage() {
           Conecte suas lojas externas para sincronizar pedidos.
         </p>
       </div>
+
+      {/* 3. Passa o status verdadeiro para o componente */}
       <Separator />
-      <IntegrationsList />
+      <IntegrationsList isMLConnected={isMLConnected} />
     </div>
   );
 }

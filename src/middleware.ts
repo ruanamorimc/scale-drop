@@ -2,42 +2,67 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
 export async function middleware(request: NextRequest) {
-  const { nextUrl } = request;
-  
-  // 1. Busca a sessão direto da API do Better Auth
-  // Usamos fetch aqui porque o middleware roda no Edge e não tem acesso ao Prisma direto
-  const response = await fetch(`${nextUrl.origin}/api/auth/get-session`, {
-    headers: {
-      cookie: request.headers.get("cookie") || "",
-    },
-  });
+  const nextUrl = request.nextUrl;
 
-  const session = await response.json();
-  const user = session?.user;
-  const isAuthenticated = !!session?.user;
+  // -----------------------------------------------------------------------------
+  // 1. A CORREÇÃO DO NGROK (Mantivemos isso)
+  // -----------------------------------------------------------------------------
+  // Se for desenvolvimento, forçamos localhost para evitar o erro "fetch failed"
+  const baseURL =
+    process.env.NODE_ENV === "production"
+      ? nextUrl.origin
+      : "http://127.0.0.1:3000";
+  let session = null;
+  let user = null;
 
-  // Defina suas rotas
-  const isDashboardRoute = nextUrl.pathname.startsWith("/dashboard");
-  const isAuthRoute = nextUrl.pathname.startsWith("/login") || nextUrl.pathname.startsWith("/sign-up");
-  const isPricingRoute = nextUrl.pathname.startsWith("/pricing"); // Sua página de planos
+  try {
+    const response = await fetch(`${baseURL}/api/auth/get-session`, {
+      headers: {
+        cookie: request.headers.get("cookie") || "",
+      },
+    });
 
-  // LÓGICA DE PROTEÇÃO
-
-  // A. Se não está logado e tenta acessar dashboard -> Manda pro Login
-  if (isDashboardRoute && !isAuthenticated) {
-    return NextResponse.redirect(new URL("/login", request.url));
+    session = await response.json();
+    user = session?.user;
+  } catch (error) {
+    console.error("Erro no middleware (Auth check):", error);
+    // Se der erro técnico na auth, seguimos vida para não travar o app,
+    // as checagens abaixo vão tratar o user como nulo.
   }
 
-  // B. Se está logado, mas tenta acessar auth (login/cadastro) -> Manda pro Dashboard
+  const isAuthenticated = !!session?.user;
+
+  // -----------------------------------------------------------------------------
+  // 2. SUAS REGRAS DE ROTAS (Restauramos isso do seu print)
+  // -----------------------------------------------------------------------------
+
+  const isDashboardRoute =
+    nextUrl.pathname.startsWith("/dashboard") ||
+    nextUrl.pathname.startsWith("/settings") ||
+    nextUrl.pathname.startsWith("/orders");
+  const isAuthRoute =
+    nextUrl.pathname.startsWith("/auth") ||
+    nextUrl.pathname === "/login" ||
+    nextUrl.pathname === "/sign-up";
+  const isPricingRoute = nextUrl.pathname.startsWith("/pricing");
+
+  // A. Se não está logado e tenta acessar área privada -> Manda pro Login
+  if (isDashboardRoute && !isAuthenticated) {
+    // Redireciona para o login padrão
+    return NextResponse.redirect(new URL("/auth/sign-in", request.url));
+  }
+
+  // B. Se já está logado, mas tenta acessar página de login -> Manda pro Dashboard
   if (isAuthRoute && isAuthenticated) {
     return NextResponse.redirect(new URL("/dashboard", request.url));
   }
 
   // C. 🔒 O GUARDIÃO DO SAAS: Verifica o Pagamento
   if (isDashboardRoute && isAuthenticated) {
-    // Verifique se o status no seu banco é "ACTIVE" ou "active" (case sensitive!)
-    // Baseado no seu print, parece estar "PENDING".
-    if (user.accessStatus !== "ACTIVE") {
+    // Baseado no seu print image_15497d.png
+    // Verifique se o campo no seu banco chama 'accessStatus' ou 'planStatus'
+    // Estou mantendo 'accessStatus' conforme seu print.
+    if (user?.accessStatus !== "ACTIVE") {
       // Se não pagou, redireciona para a página de vendas
       return NextResponse.redirect(new URL("/pricing", request.url));
     }
@@ -46,10 +71,15 @@ export async function middleware(request: NextRequest) {
   return NextResponse.next();
 }
 
-// Configuração para o Middleware não rodar em arquivos estáticos, imagens, etc.
 export const config = {
   matcher: [
-    // Roda em todas as rotas, EXCETO arquivos estáticos, imagens, favicon, api
-    "/((?!api|_next/static|_next/image|favicon.ico).*)",
+    // Todas as rotas que precisam passar pelo middleware
+    "/dashboard/:path*",
+    "/settings/:path*",
+    "/orders/:path*",
+    "/auth/:path*",
+    "/login",
+    "/sign-up",
+    "/pricing", // Importante incluir pricing para não dar loop infinito se precisar tratar algo lá
   ],
 };

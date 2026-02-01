@@ -21,6 +21,10 @@ export const auth = betterAuth({
   database: prismaAdapter(prisma, {
     provider: "postgresql",
   }),
+  trustedOrigins: [
+    "http://localhost:3000",
+    "https://uncruel-tonda-theoretically.ngrok-free.dev", // Seu link do Ngrok
+  ],
   emailAndPassword: {
     enabled: true,
     async sendResetPassword({ user, url }) {
