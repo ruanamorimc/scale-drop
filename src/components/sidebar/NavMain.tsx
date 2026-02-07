@@ -24,7 +24,7 @@ const items = [
   },
   {
     title: "Produtos e Custos",
-    url: "#",
+    url: "/products",
     icon: Tag,
   },
   {

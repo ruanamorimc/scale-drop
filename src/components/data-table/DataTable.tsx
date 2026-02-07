@@ -5,9 +5,12 @@ import {
   flexRender,
   getCoreRowModel,
   getPaginationRowModel,
-  useReactTable,
-  SortingState,
   getSortedRowModel,
+  SortingState,
+  useReactTable,
+  getFilteredRowModel,
+  ColumnFiltersState,
+  VisibilityState,
 } from "@tanstack/react-table";
 import {
   Table,
@@ -20,19 +23,19 @@ import {
 import { useState } from "react";
 import { DataTablePagination } from "./TablePagination";
 
-// Tipagem genérica: A tabela aceita qualquer tipo de dado (TData)
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
+  // 👇 NOVO: Adicionamos essa prop opcional para capturar o clique
+  onRowClick?: (row: TData) => void;
 }
 
 export function DataTable<TData, TValue>({
   columns,
   data,
+  onRowClick, // Recebe a função aqui
 }: DataTableProps<TData, TValue>) {
-  // Estado para ordenação (Sort)
   const [sorting, setSorting] = useState<SortingState>([]);
-  // Estado para seleção de linhas (Checkbox)
   const [rowSelection, setRowSelection] = useState({});
 
   const table = useReactTable({
@@ -51,20 +54,25 @@ export function DataTable<TData, TValue>({
 
   return (
     <div className="space-y-4">
-      {/* Container da Tabela com borda arredondada estilo Invoice */}
       <div className="rounded-md border border-neutral-800 bg-neutral-950/50">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id} className="border-neutral-800 hover:bg-transparent">
+              <TableRow
+                key={headerGroup.id}
+                className="border-neutral-800 hover:bg-transparent"
+              >
                 {headerGroup.headers.map((header) => {
                   return (
-                    <TableHead key={header.id} className="text-xs font-medium uppercase text-muted-foreground">
+                    <TableHead
+                      key={header.id}
+                      className="text-xs font-medium uppercase text-muted-foreground"
+                    >
                       {header.isPlaceholder
                         ? null
                         : flexRender(
                             header.column.columnDef.header,
-                            header.getContext()
+                            header.getContext(),
                           )}
                     </TableHead>
                   );
@@ -78,13 +86,15 @@ export function DataTable<TData, TValue>({
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
-                  className="border-neutral-800 hover:bg-neutral-900/50"
+                  className={`border-neutral-800 hover:bg-neutral-900/50 ${onRowClick ? "cursor-pointer" : ""}`}
+                  // 👇 AQUI ESTÁ O SEGREDO: Se tiver a prop, executa ela passando os dados originais
+                  onClick={() => onRowClick && onRowClick(row.original)}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id} className="py-3">
                       {flexRender(
                         cell.column.columnDef.cell,
-                        cell.getContext()
+                        cell.getContext(),
                       )}
                     </TableCell>
                   ))}
@@ -94,16 +104,15 @@ export function DataTable<TData, TValue>({
               <TableRow>
                 <TableCell
                   colSpan={columns.length}
-                  className="h-24 text-center text-muted-foreground"
+                  className="h-24 text-center"
                 >
-                  Nenhum resultado encontrado.
+                  Sem resultados.
                 </TableCell>
               </TableRow>
             )}
           </TableBody>
         </Table>
       </div>
-
       {/* Paginação separada */}
       <DataTablePagination table={table} />
     </div>
