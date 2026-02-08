@@ -8,9 +8,6 @@ import {
   getSortedRowModel,
   SortingState,
   useReactTable,
-  getFilteredRowModel,
-  ColumnFiltersState,
-  VisibilityState,
 } from "@tanstack/react-table";
 import {
   Table,
@@ -20,59 +17,62 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { Button } from "@/components/ui/button";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { useState } from "react";
-import { DataTablePagination } from "./TablePagination";
 
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
-  // 👇 NOVO: Adicionamos essa prop opcional para capturar o clique
+  meta?: any; // Adicionado para suportar a função onEdit
   onRowClick?: (row: TData) => void;
 }
 
 export function DataTable<TData, TValue>({
   columns,
   data,
-  onRowClick, // Recebe a função aqui
+  meta,
+  onRowClick,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([]);
-  const [rowSelection, setRowSelection] = useState({});
 
   const table = useReactTable({
     data,
     columns,
     getCoreRowModel: getCoreRowModel(),
     getPaginationRowModel: getPaginationRowModel(),
-    onSortingChange: setSorting,
     getSortedRowModel: getSortedRowModel(),
-    onRowSelectionChange: setRowSelection,
+    onSortingChange: setSorting,
     state: {
       sorting,
-      rowSelection,
     },
+    meta: meta, // Passando o meta (funções de edit) para a tabela
+    initialState: {
+        pagination: {
+            pageSize: 10,
+        }
+    }
   });
 
   return (
-    <div className="space-y-4">
-      <div className="rounded-md border border-neutral-800 bg-neutral-950/50">
+    <div className="w-full space-y-4">
+      {/* CORREÇÃO DE CORES AQUI: 
+         Usamos 'bg-background' e 'border-border' para se adaptar ao tema (claro/escuro)
+         automaticamente, sem forçar o cinza escuro.
+      */}
+      <div className="rounded-md border border-border bg-background">
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow
-                key={headerGroup.id}
-                className="border-neutral-800 hover:bg-transparent"
-              >
+              <TableRow key={headerGroup.id} className="border-border hover:bg-transparent">
                 {headerGroup.headers.map((header) => {
                   return (
-                    <TableHead
-                      key={header.id}
-                      className="text-xs font-medium uppercase text-muted-foreground"
-                    >
+                    <TableHead key={header.id} className="h-10 text-xs font-medium uppercase text-muted-foreground">
                       {header.isPlaceholder
                         ? null
                         : flexRender(
                             header.column.columnDef.header,
-                            header.getContext(),
+                            header.getContext()
                           )}
                     </TableHead>
                   );
@@ -86,26 +86,20 @@ export function DataTable<TData, TValue>({
                 <TableRow
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
-                  className={`border-neutral-800 hover:bg-neutral-900/50 ${onRowClick ? "cursor-pointer" : ""}`}
-                  // 👇 AQUI ESTÁ O SEGREDO: Se tiver a prop, executa ela passando os dados originais
+                  // CORREÇÃO: hover:bg-muted/50 é o padrão do Shadcn para hover suave
+                  className={`border-border hover:bg-muted/50 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
                   onClick={() => onRowClick && onRowClick(row.original)}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id} className="py-3">
-                      {flexRender(
-                        cell.column.columnDef.cell,
-                        cell.getContext(),
-                      )}
+                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
                     </TableCell>
                   ))}
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell
-                  colSpan={columns.length}
-                  className="h-24 text-center"
-                >
+                <TableCell colSpan={columns.length} className="h-24 text-center">
                   Sem resultados.
                 </TableCell>
               </TableRow>
@@ -113,8 +107,37 @@ export function DataTable<TData, TValue>({
           </TableBody>
         </Table>
       </div>
-      {/* Paginação separada */}
-      <DataTablePagination table={table} />
+
+      {/* Paginação */}
+      <div className="flex items-center justify-between px-2">
+        <div className="flex-1 text-sm text-muted-foreground">
+          {table.getFilteredSelectedRowModel().rows.length} de{" "}
+          {table.getFilteredRowModel().rows.length} linha(s) selecionada(s).
+        </div>
+        <div className="flex items-center space-x-6 lg:space-x-8">
+          <div className="flex items-center space-x-2">
+            <p className="text-sm font-medium">Pág {table.getState().pagination.pageIndex + 1} de {table.getPageCount()}</p>
+          </div>
+          <div className="flex items-center space-x-2">
+            <Button
+              variant="outline"
+              className="h-8 w-8 p-0 border-border" // border-border aqui também
+              onClick={() => table.previousPage()}
+              disabled={!table.getCanPreviousPage()}
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </Button>
+            <Button
+              variant="outline"
+              className="h-8 w-8 p-0 border-border"
+              onClick={() => table.nextPage()}
+              disabled={!table.getCanNextPage()}
+            >
+              <ChevronRight className="h-4 w-4" />
+            </Button>
+          </div>
+        </div>
+      </div>
     </div>
   );
 }

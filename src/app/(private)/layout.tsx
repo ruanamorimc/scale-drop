@@ -3,6 +3,7 @@ import { AppSidebar } from "@/components/sidebar/Index";
 import { getServerSession } from "@/lib/get-session";
 import { unauthorized } from "next/navigation";
 import { ThemeProvider } from "@/components/providers/ThemeProviders";
+import { Toaster } from "@/components/ui/sonner";
 
 export default async function PrivateLayout({
   children,
@@ -25,6 +26,7 @@ export default async function PrivateLayout({
         <AppSidebar variant="floating" collapsible="icon" />
         <main className="w-full">
           <div className="px-4">{children}</div>
+          <Toaster richColors position="top-right" />
         </main>
       </SidebarProvider>
     </ThemeProvider>

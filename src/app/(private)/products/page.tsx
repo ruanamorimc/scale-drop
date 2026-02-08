@@ -1,211 +1,411 @@
-import { Badge } from "@/components/ui/badge";
+"use client";
+
+import { useState, useEffect, useMemo } from "react";
+import { columns, Product } from "./columns";
+import { DataTable } from "@/components/data-table/DataTable";
+import { ProductEditSheet } from "@/components/products/ProductEditSheet";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { DownloadButton } from "@/components/download-button";
 import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { AlertCircle, ArrowUpDown, MoreHorizontal, RefreshCw, Search } from "lucide-react";
-import Image from "next/image";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
+  RefreshCw,
+  Store,
+  Tag,
+  Activity,
+  XCircle,
+  Loader2,
+} from "lucide-react";
+import { toast } from "sonner";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 
-// --- DADOS FALSOS (MOCK) ---
-// Simulam o que virá do Banco de Dados + API do ML
-const MOCK_PRODUCTS = [
-  {
-    id: "MLB123456",
-    image: "https://http2.mlstatic.com/D_NQ_NP_606760-MLB49392230678_032022-O.webp", // Link real do ML para teste
-    title: "Relógio Smartwatch D20 Bluetooth Monitor Cardíaco",
-    status: "active", // active, paused
-    stock: 154,
-    salePrice: 89.90,
-    costPrice: 35.00, // Custo do Produto (CMV)
-    taxML: 16.00,     // Taxa do ML
-    shipping: 0.00,   // Frete por conta do comprador
-  },
-  {
-    id: "MLB987654",
-    image: "https://http2.mlstatic.com/D_NQ_NP_796578-MLB52244976450_112022-O.webp",
-    title: "Fone de Ouvido Bluetooth Sem Fio TWS i12 Touch",
-    status: "paused",
-    stock: 0,
-    salePrice: 45.00,
-    costPrice: 28.00,
-    taxML: 11.50,
-    shipping: 18.90, // Frete Grátis (Vendedor pagou) -> Prejuízo provável!
-  },
-  {
-    id: "MLB555666",
-    title: "Kit 5 Camisetas Básicas Algodão Premium",
-    image: "https://http2.mlstatic.com/D_NQ_NP_638053-MLB48842666795_012022-O.webp",
-    status: "active",
-    stock: 50,
-    salePrice: 149.90,
-    costPrice: 60.00,
-    taxML: 28.00,
-    shipping: 22.90,
-  }
-];
-
-// Função auxiliar para formatar dinheiro
-const formatCurrency = (value: number) => {
-  return new Intl.NumberFormat("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  }).format(value);
-};
+// 👇 IMPORTANDO AS ACTIONS REAIS DO BACKEND
+import {
+  getProducts,
+  saveProduct,
+  deleteProduct,
+  generateTestProducts,
+} from "@/actions/products";
+import { Input } from "@/components/ui/input";
 
 export default function ProductsPage() {
+  // --- ESTADOS ---
+  const [data, setData] = useState<Product[]>([]); // Começa vazio
+  const [isLoading, setIsLoading] = useState(true); // Estado de carregamento
+
+  // Estados de Edição/Modal
+  const [editingProduct, setEditingProduct] = useState<Product | null>(null);
+  const [isSheetOpen, setIsSheetOpen] = useState(false);
+
+  // Estados de Delete
+  const [deletingProduct, setDeletingProduct] = useState<Product | null>(null);
+  const [isDeleteAlertOpen, setIsDeleteAlertOpen] = useState(false);
+
+  // Estados de Filtro
+  const [search, setSearch] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState("all");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [storeFilter, setStoreFilter] = useState("all");
+
+  // 🧠 LÓGICA INTELIGENTE: Extrai categorias e lojas únicas dos dados carregados
+  const uniqueCategories = useMemo(() => {
+    // Pega todas as categorias, remove vazias e remove duplicadas usando Set
+    const categories = data.map((p) => p.category).filter(Boolean) as string[];
+    return Array.from(new Set(categories)).sort(); // Ordena alfabeticamente
+  }, [data]);
+
+  const uniqueStores = useMemo(() => {
+    const stores = data.map((p) => p.store).filter(Boolean) as string[];
+    return Array.from(new Set(stores)).sort();
+  }, [data]);
+
+  // --- 1. BUSCAR DADOS DO BANCO (LOAD) ---
+  const loadData = async () => {
+    setIsLoading(true);
+    try {
+      const products = await getProducts();
+      setData(products);
+    } catch (error) {
+      toast.error("Erro ao carregar produtos");
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Carrega ao abrir a página
+  useEffect(() => {
+    loadData();
+  }, []);
+
+  // --- 2. FILTRAGEM (CLIENT SIDE) ---
+  const filteredData = useMemo(() => {
+    return data.filter((product) => {
+      const matchesSearch =
+        product.name.toLowerCase().includes(search.toLowerCase()) ||
+        product.id.toLowerCase().includes(search.toLowerCase()) ||
+        (product.sku &&
+          product.sku.toLowerCase().includes(search.toLowerCase())); // Busca por SKU também
+
+      const matchesCategory =
+        categoryFilter === "all" || product.category === categoryFilter;
+      const matchesStatus =
+        statusFilter === "all" || product.status === statusFilter;
+      const matchesStore =
+        storeFilter === "all" || product.store === storeFilter;
+
+      return matchesSearch && matchesCategory && matchesStatus && matchesStore;
+    });
+  }, [data, search, categoryFilter, statusFilter, storeFilter]);
+
+  // 🧹 PREPARAR DADOS PARA EXCEL (Tradução e Limpeza)
+  const csvData = useMemo(() => {
+    return filteredData.map((item) => ({
+      Produto: item.name,
+      SKU: item.sku || "-",
+      Loja: item.store,
+      Categoria: item.category,
+      "Preço Venda (R$)": item.salePrice, // Mantemos número pro Excel somar
+      "Custo (R$)": item.costPrice,
+      Estoque: item.stock,
+      Status: item.status === "active" ? "Ativo" : "Pausado",
+      "Link Imagem": item.image || "",
+    }));
+  }, [filteredData]);
+
+  // --- 3. ACTIONS DE INTERFACE ---
+  const handleEditClick = (product: Product) => {
+    setEditingProduct(product);
+    setIsSheetOpen(true);
+  };
+
+  const handleSeedData = async () => {
+    setIsLoading(true);
+    await generateTestProducts();
+    await loadData(); // Recarrega a tabela
+    toast.success("10 Produtos de teste gerados!");
+    setIsLoading(false);
+  };
+
+  // Caso queria criar um produto novo, pode usar essa função para abrir a sheet com um produto "vazio".
+  /*   const handleAddClick = () => {
+    setEditingProduct({
+        id: "NOVO",
+        title: "",
+        salePrice: 0,
+        costPrice: 0,
+        stock: 0,
+        status: "active",
+        image: "",
+        taxML: 0,
+        shipping: 0,
+        category: "",
+        store: "",
+        sku: "",
+        externalId: ""
+    } as Product);
+    setIsSheetOpen(true);
+  } */
+
+  // --- 4. SALVAR NO BANCO (CREATE / UPDATE) ---
+  const handleSaveProduct = async (updatedProduct: Product) => {
+    try {
+      // Chama a Server Action
+      const result = await saveProduct(updatedProduct);
+
+      if (result.success) {
+        toast.success("Produto salvo com sucesso!");
+        setIsSheetOpen(false); // Fecha o modal
+        loadData(); // Recarrega a tabela
+      } else {
+        toast.error("Erro ao salvar produto");
+        console.error(result.error);
+      }
+    } catch (error) {
+      console.error(error);
+      toast.error("Erro de conexão");
+    }
+  };
+
+  // --- 5. DELETAR DO BANCO ---
+  const handleDeleteClick = (product: Product) => {
+    setDeletingProduct(product);
+    setIsDeleteAlertOpen(true);
+  };
+
+  const confirmDelete = async () => {
+    if (!deletingProduct) return;
+
+    try {
+      const result = await deleteProduct(deletingProduct.id);
+
+      if (result.success) {
+        toast.success("Produto removido");
+        loadData(); // Recarrega a tabela
+      } else {
+        toast.error("Erro ao remover produto");
+      }
+    } catch (error) {
+      toast.error("Erro ao deletar");
+    } finally {
+      setIsDeleteAlertOpen(false);
+      setDeletingProduct(null);
+    }
+  };
+
+  const clearFilters = () => {
+    setSearch("");
+    setCategoryFilter("all");
+    setStatusFilter("all");
+    setStoreFilter("all");
+  };
+
   return (
-    <div className="space-y-6">
-      {/* 1. Cabeçalho da Página */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+    <div className="h-full flex-1 flex-col space-y-8 p-8 md:flex">
+      {/* HEADER */}
+      <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Produtos</h1>
+          <h2 className="text-2xl font-bold tracking-tight">Produtos</h2>
           <p className="text-muted-foreground">
-            Gerencie seus produtos, custos e margens de lucro.
+            Gerencie seu catálogo, preços e estoque.
           </p>
         </div>
-        <div className="flex gap-2">
-           <Button variant="outline">
-            <RefreshCw className="mr-2 h-4 w-4" />
-            Sincronizar
+        <div className="flex items-center gap-2">
+          {/* ... dentro da div do Header ... */}
+          <div className="flex items-center gap-2">
+            {/* BOTÃO MÁGICO DE TESTE (Remova depois) */}
+            {/*             <Button
+              variant="default"
+              onClick={handleSeedData}
+              disabled={isLoading}
+              className="text-muted-foreground"
+            >
+              🌱 Gerar Teste
+            </Button> */}
+          </div>
+          <Button
+            variant="default"
+            onClick={loadData}
+            disabled={isLoading}
+            className="border-dashed"
+          >
+            <RefreshCw
+              className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
+            />
+            {isLoading ? "Carregando..." : "Atualizar Produtos"}
           </Button>
-          <Button>
-            <Search className="mr-2 h-4 w-4" />
-            Buscar
-          </Button>
+          {/* <Button onClick={handleAddClick}>
+                <Plus className="mr-2 h-4 w-4" /> Adicionar Produto
+            </Button> */}
         </div>
       </div>
 
-      {/* 2. Cards de Resumo Rápido (Opcional, mas fica bonito) */}
-      <div className="grid gap-4 md:grid-cols-3">
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Total Produtos</CardTitle>
-            <MoreHorizontal className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">{MOCK_PRODUCTS.length}</div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Estoque Total</CardTitle>
-            <ArrowUpDown className="h-4 w-4 text-muted-foreground" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold">
-                {MOCK_PRODUCTS.reduce((acc, p) => acc + p.stock, 0)} itens
-            </div>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-            <CardTitle className="text-sm font-medium">Produtos sem Custo</CardTitle>
-            <AlertCircle className="h-4 w-4 text-red-500" />
-          </CardHeader>
-          <CardContent>
-            <div className="text-2xl font-bold text-red-500">0</div>
-            <p className="text-xs text-muted-foreground">Todos precificados</p>
-          </CardContent>
-        </Card>
+      {/* FILTROS */}
+      <div className="flex flex-col sm:flex-row gap-4 justify-between items-start sm:items-center">
+        <div className="w-full sm:max-w-md">
+          <Input
+            placeholder="Buscar por nome, SKU ou tag..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+          />
+        </div>
+
+        <div className="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+          {/*Baixar como CSV*/}
+          <DownloadButton data={csvData} filename="meus-produtos.csv" />
+
+          {/* FILTRO CATEGORIA */}
+          <Select value={categoryFilter} onValueChange={setCategoryFilter}>
+            <SelectTrigger className="w-[150px]">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Tag size={14} />
+                <span className="text-foreground text-sm truncate">
+                  {/* Mantenha o SelectValue aqui! Ele é o segredo */}
+                  <SelectValue placeholder="Categoria" />
+                </span>
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas</SelectItem>
+
+              {/* Gera as opções baseado no que existe no banco */}
+              {uniqueCategories.map((cat) => (
+                <SelectItem key={cat} value={cat}>
+                  {cat}
+                </SelectItem>
+              ))}
+
+              {/* Mostra um aviso se não tiver categorias ainda */}
+              {uniqueCategories.length === 0 && (
+                <div className="p-2 text-xs text-muted-foreground text-center">
+                  Sem categorias
+                </div>
+              )}
+            </SelectContent>
+          </Select>
+
+          {/* FILTRO STATUS */}
+          <Select value={statusFilter} onValueChange={setStatusFilter}>
+            <SelectTrigger className="w-[130px]">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Activity size={14} />
+                {/* 👇 A CORREÇÃO */}
+                <span className="text-foreground text-sm truncate">
+                  <SelectValue placeholder="Status" />
+                </span>
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todos</SelectItem>
+              <SelectItem value="active">Ativo</SelectItem>
+              <SelectItem value="paused">Pausado</SelectItem>
+            </SelectContent>
+          </Select>
+
+          {/* FILTRO LOJA */}
+          <Select value={storeFilter} onValueChange={setStoreFilter}>
+            <SelectTrigger className="w-[140px]">
+              <div className="flex items-center gap-2 text-muted-foreground">
+                <Store size={14} />
+                <span className="text-foreground text-sm truncate">
+                  <SelectValue placeholder="Loja" />
+                </span>
+              </div>
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">Todas</SelectItem>
+
+              {uniqueStores.map((store) => (
+                <SelectItem key={store} value={store}>
+                  {store}
+                </SelectItem>
+              ))}
+
+              {uniqueStores.length === 0 && (
+                <div className="p-2 text-xs text-muted-foreground text-center">
+                  Nenhuma loja
+                </div>
+              )}
+            </SelectContent>
+          </Select>
+
+          {(search ||
+            categoryFilter !== "all" ||
+            statusFilter !== "all" ||
+            storeFilter !== "all") && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={clearFilters}
+              className="text-muted-foreground hover:text-foreground"
+            >
+              <XCircle size={18} />
+            </Button>
+          )}
+        </div>
       </div>
 
-      {/* 3. A Tabela Principal */}
-      <div className="border rounded-lg">
-        <Table>
-          <TableHeader>
-            <TableRow>
-              <TableHead className="w-[80px]">Imagem</TableHead>
-              <TableHead>Produto</TableHead>
-              <TableHead className="text-right">Venda</TableHead>
-              <TableHead className="text-right text-muted-foreground">Custo (CMV)</TableHead>
-              <TableHead className="text-right text-muted-foreground">Taxas</TableHead>
-              <TableHead className="text-right">Lucro Líq.</TableHead>
-              <TableHead className="text-center">Status</TableHead>
-              <TableHead className="w-[50px]"></TableHead>
-            </TableRow>
-          </TableHeader>
-          <TableBody>
-            {MOCK_PRODUCTS.map((product) => {
-              // Cálculo de Lucro em Tempo Real
-              const totalCost = product.costPrice + product.taxML + product.shipping;
-              const profit = product.salePrice - totalCost;
-              const margin = (profit / product.salePrice) * 100;
-              const isProfitPositive = profit > 0;
-
-              return (
-                <TableRow key={product.id}>
-                  {/* Imagem */}
-                  <TableCell>
-                    <div className="relative h-12 w-12 rounded-md overflow-hidden bg-neutral-100 dark:bg-neutral-800">
-                         {/* Usando img normal por enquanto para facilitar testar URLs externas */}
-                         {/* eslint-disable-next-line @next/next/no-img-element */}
-                         <img 
-                            src={product.image} 
-                            alt={product.title} 
-                            className="object-cover h-full w-full"
-                         />
-                    </div>
-                  </TableCell>
-                  
-                  {/* Título e SKU */}
-                  <TableCell>
-                    <div className="flex flex-col">
-                        <span className="font-medium line-clamp-1">{product.title}</span>
-                        <span className="text-xs text-muted-foreground">{product.id} • Estoque: {product.stock}</span>
-                    </div>
-                  </TableCell>
-
-                  {/* Preço Venda */}
-                  <TableCell className="text-right font-medium">
-                    {formatCurrency(product.salePrice)}
-                  </TableCell>
-
-                  {/* Custo */}
-                  <TableCell className="text-right text-muted-foreground">
-                    {formatCurrency(product.costPrice)}
-                  </TableCell>
-
-                  {/* Taxas (Soma ML + Frete) */}
-                  <TableCell className="text-right text-muted-foreground text-xs">
-                    <div className="flex flex-col">
-                        <span>{formatCurrency(product.taxML)} (Taxa)</span>
-                        {product.shipping > 0 && <span>+ {formatCurrency(product.shipping)} (Frete)</span>}
-                    </div>
-                  </TableCell>
-
-                  {/* Lucro (A Mágica) */}
-                  <TableCell className="text-right">
-                    <div className={`flex flex-col ${isProfitPositive ? 'text-green-600 dark:text-green-400' : 'text-red-600 dark:text-red-400'}`}>
-                        <span className="font-bold">{formatCurrency(profit)}</span>
-                        <span className="text-xs">{margin.toFixed(1)}%</span>
-                    </div>
-                  </TableCell>
-
-                  {/* Status */}
-                  <TableCell className="text-center">
-                    <Badge variant={product.status === "active" ? "default" : "secondary"}>
-                        {product.status === "active" ? "Ativo" : "Pausado"}
-                    </Badge>
-                  </TableCell>
-
-                  {/* Ações */}
-                  <TableCell>
-                    <Button variant="ghost" size="icon">
-                        <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
-          </TableBody>
-        </Table>
+      {/* TABELA COM LOADING STATE */}
+      <div className="flex-1 overflow-auto pr-2">
+        {isLoading ? (
+          <div className="flex h-64 items-center justify-center">
+            <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+          </div>
+        ) : (
+          <DataTable
+            columns={columns}
+            data={filteredData}
+            meta={{
+              onEdit: handleEditClick,
+              onDelete: handleDeleteClick,
+            }}
+          />
+        )}
       </div>
+
+      <ProductEditSheet
+        product={editingProduct}
+        isOpen={isSheetOpen}
+        onOpenChange={setIsSheetOpen}
+        onSave={handleSaveProduct}
+      />
+
+      <AlertDialog open={isDeleteAlertOpen} onOpenChange={setIsDeleteAlertOpen}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Você tem certeza absoluta?</AlertDialogTitle>
+            <AlertDialogDescription>
+              Isso excluirá permanentemente o produto{" "}
+              <span className="font-bold text-foreground">
+                {deletingProduct?.name}
+              </span>
+              .
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancelar</AlertDialogCancel>
+            <AlertDialogAction
+              onClick={confirmDelete}
+              className="bg-destructive text-destructive-foreground hover:bg-destructive/90"
+            >
+              Sim, excluir
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   );
 }

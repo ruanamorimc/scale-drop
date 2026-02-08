@@ -341,8 +341,17 @@ model Product {
   supplierId String?
   supplier   Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
 
+  // --- Identificação Externa (O SEGREDO DO MULTI-LOJAS) 🦎 ---
+  // Aqui a gente generaliza. Não usamos 'mlbId', usamos 'externalId'.
+  externalId    String?  // ID na loja (ex: "MLB123", "7654321")
+  provider      String   @default("MANUAL") // "MERCADO_LIVRE", "SHOPIFY", "SHOPEE", "MANUAL"
+  storeName     String?  // Nome da loja visual (ex: "Minha Loja ML Principal")
+
+  // Link direto para o produto na plataforma original
+  externalLink  String?
+
   // Dados básicos
-  name    String
+  name    String  // Título do produto
   sku     String? // SKU do produto
   barcode String? // Código de barras
 
@@ -350,12 +359,16 @@ model Product {
   costPrice Decimal? @db.Decimal(10, 2) // Preço de custo (fornecedor)
   salePrice Decimal? @db.Decimal(10, 2) // Preço de venda sugerido
 
+  // --- Taxas (Novos campos para a Calculadora) ---
+  platformFee   Decimal  @default(0) @db.Decimal(10, 2) // Taxa (ex: 16% do ML)
+  shippingFee   Decimal  @default(0) @db.Decimal(10, 2) // Custo de envio/Frete
+
   // Estoque
   stockQuantity Int  @default(0)
   minStock      Int? // Estoque mínimo
 
   // Descrição e imagens
-  description String?
+  description String?  @db.Text // Usei @db.Text para descrições longas HTML
   images      String[] // URLs das imagens
 
   // Categorias e tags
@@ -363,7 +376,7 @@ model Product {
   tags     String[]
 
   // Status
-  isActive    Boolean @default(true)
+  isActive    Boolean @default(true)  // Mapeamos: active->true, paused->false
   isPublished Boolean @default(false) // Se está publicado nas lojas
 
   // Dados do fornecedor
@@ -373,15 +386,22 @@ model Product {
   // Relacionamentos
   orderItems OrderItem[]
 
+  // --- Metadados ---
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
+  // --- ÍNDICES E CHAVES ÚNICAS ---
   @@index([userId])
   @@index([supplierId])
   @@index([sku])
   @@index([isActive])
   @@index([isPublished])
   @@map("product")
+
+  // 🔥 A REGRA DE OURO:
+  // Impede duplicar o mesmo produto da mesma loja para o mesmo usuário.
+  // Mas permite que usuários diferentes vendam o mesmo produto.
+  @@unique([externalId, provider, userId])
 }
 
 // ============================================
