@@ -42,6 +42,9 @@ model User {
   storeIntegrations     StoreIntegration[]
   products              Product[]
   orders                Order[]
+  fees                  Fee[]
+  taxes                 Tax[]
+  fixedExpenses         FixedExpense[]
 
   @@unique([email])
   @@index([accessStatus])
@@ -402,6 +405,55 @@ model Product {
   // Impede duplicar o mesmo produto da mesma loja para o mesmo usuário.
   // Mas permite que usuários diferentes vendam o mesmo produto.
   @@unique([externalId, provider, userId])
+}
+
+// ============================================
+// DESPESA FIXA
+// ============================================
+model FixedExpense {
+  id          String   @id @default(cuid())
+  userId      String
+  description String   // Ex: "Shopify", "Funcionário"
+  category    String   // Ex: "Ferramentas", "Equipe", "Infra"
+  amount      Decimal  @db.Decimal(10, 2)
+  date        DateTime // Data de competência
+  createdAt   DateTime @default(now())
+  
+  user        User     @relation(fields: [userId], references: [id])
+}
+
+// ============================================
+// TAXAS
+// ============================================
+model Fee {
+  id              String   @id @default(cuid())
+  userId          String
+  name            String   // Ex: "Taxa Kirvano", "Mercado Pago"
+  type            String   // "FIXED" ou "PERCENTAGE"
+  value           Decimal  @db.Decimal(10, 2)
+  calculationRule String? // "faturamento" ou "venda" (Pode ser nulo se for taxa fixa)
+  paymentMethod   String[] // ["PIX", "BOLETO", "CARD_1X", etc]
+  isDefault       Boolean  @default(true)
+  createdAt       DateTime @default(now())
+  
+  user            User     @relation(fields: [userId], references: [id])
+}
+
+// ============================================
+// IMPOSTOS
+// ============================================
+model Tax {
+  id              String   @id @default(cuid())
+  userId          String
+  name            String   // Ex:"Simples Nacional","Imposto do Anúncio (Meta)" 
+  rate            Decimal  @db.Decimal(10, 2) // Porcentagem
+  type            String?  @default("GOVERNMENT")
+  calculationRule String?  @default("faturamento") // "faturamento" ou "comissao"
+  isSystem        Boolean  @default(false)         // Se for true, não mostra lixeira
+  isActive        Boolean  @default(true)
+  createdAt       DateTime @default(now()) // Importante ter data de criação
+  
+  user      User   @relation(fields: [userId], references: [id])
 }
 
 // ============================================

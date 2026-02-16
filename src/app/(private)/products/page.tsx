@@ -1,9 +1,16 @@
 "use client";
 
 import { useState, useEffect, useMemo } from "react";
+
 import { columns, Product } from "./columns";
 import { DataTable } from "@/components/data-table/DataTable";
 import { ProductEditSheet } from "@/components/products/ProductEditSheet";
+
+import { Fee } from "@/app/(private)/finance/fees/columns";
+import { Tax } from "@/app/(private)/finance/taxes/columns";
+import { getFees } from "@/actions/fees";
+import { getTaxes } from "@/actions/taxes";
+
 import { Button } from "@/components/ui/button";
 import { DownloadButton } from "@/components/download-button";
 import {
@@ -61,6 +68,34 @@ export default function ProductsPage() {
   const [statusFilter, setStatusFilter] = useState("all");
   const [storeFilter, setStoreFilter] = useState("all");
 
+  // Novos estados para guardar as regras fiscais
+const [globalFees, setGlobalFees] = useState<Fee[]>([]);
+const [globalTaxes, setGlobalTaxes] = useState<Tax[]>([]);
+
+  // Atualize o loadData para buscar tudo junto
+  const loadData = async () => {
+  setIsLoading(true);
+  try {
+    // Busca tudo de uma vez (Paralelo = Mais rápido)
+    const [productsData, feesData, taxesData] = await Promise.all([
+      getProducts(),
+      getFees(),
+      getTaxes()
+    ]);
+
+    // O compilador pode reclamar se o tipo do getProducts não bater exato, 
+    // mas vamos garantir que ele aceite
+    setData(productsData); 
+    setGlobalFees(feesData as Fee[]);
+    setGlobalTaxes(taxesData as Tax[]);
+    
+  } catch (error) {
+    toast.error("Erro ao carregar dados.");
+  } finally {
+    setIsLoading(false);
+  }
+};
+
   // 🧠 LÓGICA INTELIGENTE: Extrai categorias e lojas únicas dos dados carregados
   const uniqueCategories = useMemo(() => {
     // Pega todas as categorias, remove vazias e remove duplicadas usando Set
@@ -74,7 +109,7 @@ export default function ProductsPage() {
   }, [data]);
 
   // --- 1. BUSCAR DADOS DO BANCO (LOAD) ---
-  const loadData = async () => {
+/*   const loadData = async () => {
     setIsLoading(true);
     try {
       const products = await getProducts();
@@ -84,7 +119,7 @@ export default function ProductsPage() {
     } finally {
       setIsLoading(false);
     }
-  };
+  }; */
 
   // Carrega ao abrir a página
   useEffect(() => {
@@ -371,6 +406,9 @@ export default function ProductsPage() {
             meta={{
               onEdit: handleEditClick,
               onDelete: handleDeleteClick,
+              // 👇 PASSAMOS AS REGRAS PARA AS COLUNAS AQUI | TAXA E IMPOSTO
+            fees: globalFees,
+            taxes: globalTaxes,
             }}
           />
         )}

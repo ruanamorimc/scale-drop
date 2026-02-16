@@ -1,0 +1,6 @@
+-- AlterTable
+ALTER TABLE "Fee" ADD COLUMN     "calculationRule" TEXT;
+
+-- AlterTable
+ALTER TABLE "Tax" ADD COLUMN     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+ADD COLUMN     "type" TEXT DEFAULT 'GOVERNMENT';

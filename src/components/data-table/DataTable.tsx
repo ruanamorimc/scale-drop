@@ -24,6 +24,7 @@ import { useState } from "react";
 interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
+  pageSize?: number; // 1. ADICIONE ISSO NA INTERFACE (Opcional)
   meta?: any; // Adicionado para suportar a função onEdit
   onRowClick?: (row: TData) => void;
 }
@@ -31,6 +32,7 @@ interface DataTableProps<TData, TValue> {
 export function DataTable<TData, TValue>({
   columns,
   data,
+  pageSize = 10, // 2. ADICIONE ISSO AQUI (Valor padrão 10 se ninguém falar nada)
   meta,
   onRowClick,
 }: DataTableProps<TData, TValue>) {
@@ -48,10 +50,10 @@ export function DataTable<TData, TValue>({
     },
     meta: meta, // Passando o meta (funções de edit) para a tabela
     initialState: {
-        pagination: {
-            pageSize: 10,
-        }
-    }
+      pagination: {
+        pageSize: pageSize,
+      },
+    },
   });
 
   return (
@@ -64,15 +66,21 @@ export function DataTable<TData, TValue>({
         <Table>
           <TableHeader>
             {table.getHeaderGroups().map((headerGroup) => (
-              <TableRow key={headerGroup.id} className="border-border hover:bg-transparent">
+              <TableRow
+                key={headerGroup.id}
+                className="border-border hover:bg-transparent"
+              >
                 {headerGroup.headers.map((header) => {
                   return (
-                    <TableHead key={header.id} className="h-10 text-xs font-medium uppercase text-muted-foreground">
+                    <TableHead
+                      key={header.id}
+                      className="h-10 text-xs font-medium uppercase text-muted-foreground"
+                    >
                       {header.isPlaceholder
                         ? null
                         : flexRender(
                             header.column.columnDef.header,
-                            header.getContext()
+                            header.getContext(),
                           )}
                     </TableHead>
                   );
@@ -87,19 +95,25 @@ export function DataTable<TData, TValue>({
                   key={row.id}
                   data-state={row.getIsSelected() && "selected"}
                   // CORREÇÃO: hover:bg-muted/50 é o padrão do Shadcn para hover suave
-                  className={`border-border hover:bg-muted/50 transition-colors ${onRowClick ? 'cursor-pointer' : ''}`}
+                  className={`border-border hover:bg-muted/50 transition-colors ${onRowClick ? "cursor-pointer" : ""}`}
                   onClick={() => onRowClick && onRowClick(row.original)}
                 >
                   {row.getVisibleCells().map((cell) => (
                     <TableCell key={cell.id} className="py-3">
-                      {flexRender(cell.column.columnDef.cell, cell.getContext())}
+                      {flexRender(
+                        cell.column.columnDef.cell,
+                        cell.getContext(),
+                      )}
                     </TableCell>
                   ))}
                 </TableRow>
               ))
             ) : (
               <TableRow>
-                <TableCell colSpan={columns.length} className="h-24 text-center">
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-24 text-center"
+                >
                   Sem resultados.
                 </TableCell>
               </TableRow>
@@ -116,7 +130,10 @@ export function DataTable<TData, TValue>({
         </div>
         <div className="flex items-center space-x-6 lg:space-x-8">
           <div className="flex items-center space-x-2">
-            <p className="text-sm font-medium">Pág {table.getState().pagination.pageIndex + 1} de {table.getPageCount()}</p>
+            <p className="text-sm font-medium">
+              Pág {table.getState().pagination.pageIndex + 1} de{" "}
+              {table.getPageCount()}
+            </p>
           </div>
           <div className="flex items-center space-x-2">
             <Button
