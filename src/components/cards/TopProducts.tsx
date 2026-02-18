@@ -1,154 +1,88 @@
 "use client";
 
-import {
-  Headphones,
-  Watch,
-  Camera,
-  Smartphone,
-  MoreVertical,
-} from "lucide-react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Package } from "lucide-react";
+import { PremiumCard } from "@/components/cards/PremiumCard";
 import { Button } from "@/components/ui/button";
+import Link from "next/link";
 
-// Mock Data
-const topProducts = [
-  {
-    id: "BH-001",
-    name: "Bluetooth Headphones",
-    sales: 85,
-    revenue: 340000,
-    icon: Headphones,
-    color: "text-cyan-400",
-    bg: "bg-cyan-400/10",
-  },
-  {
-    id: "SW-002",
-    name: "Smartwatch",
-    sales: 72,
-    revenue: 576000,
-    icon: Watch,
-    color: "text-purple-400",
-    bg: "bg-purple-400/10",
-  },
-  {
-    id: "MC-003",
-    name: "Mirrorless Camera",
-    sales: 54,
-    revenue: 162000,
-    icon: Camera,
-    color: "text-blue-400",
-    bg: "bg-blue-400/10",
-  },
-  {
-    id: "SP-004",
-    name: "Smartphone",
-    sales: 67,
-    revenue: 134000,
-    icon: Smartphone,
-    color: "text-indigo-400",
-    bg: "bg-indigo-400/10",
-  },
-  // 👇 Adicionei mais itens para testar o scroll (pode remover depois)
-  {
-    id: "GM-005",
-    name: "Gaming Mouse",
-    sales: 45,
-    revenue: 90000,
-    icon: Smartphone,
-    color: "text-green-400",
-    bg: "bg-green-400/10",
-  },
-  {
-    id: "KB-006",
-    name: "Mechanical Keyboard",
-    sales: 30,
-    revenue: 120000,
-    icon: Smartphone,
-    color: "text-orange-400",
-    bg: "bg-orange-400/10",
-  },
-];
-
-export function TopProducts() {
-  const formatCurrency = (value: number) => {
-    return new Intl.NumberFormat("pt-BR", {
-      style: "currency",
-      currency: "BRL",
-      //maximumFractionDigits: 0,
-    }).format(value);
-  };
+export function TopProducts({ data }: { data: any }) {
+  // Pega a lista retornada pela Action ou array vazio
+  const products = data?.topProducts || [];
 
   return (
-    <Card className="h-full flex flex-col">
-      {" "}
-      {/* flex-col para o header ficar fixo e o content esticar se precisar */}
-      <CardHeader className="flex flex-row items-center justify-between pb-4">
-        <div className="space-y-1">
-          <CardTitle className="text-2xl font-semibold tabular-nums @[250px]/card:text-3xl">
-            Produtos mais vendidos
-          </CardTitle>
-        </div>
-        <Button variant="ghost" size="icon" className="h-8 w-8">
-          <MoreVertical className="h-4 w-4" />
-        </Button>
-      </CardHeader>
-      <CardContent className="flex-1">
-        {" "}
-        {/* flex-1 ocupa o espaço restante */}
-        {/* 👇 AQUI ESTÁ O SEGREDO DO SCROLL 👇 */}
-        <div className="space-y-4 max-h-[328px] overflow-y-auto pr-2 [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:bg-neutral-800 [&::-webkit-scrollbar-thumb]:rounded-full">
-          {topProducts.map((product) => (
-            <div
-              key={product.id}
-              className="flex flex-col gap-3 rounded-xl border border-neutral-800 bg-neutral-900/50 p-3 shadow-sm transition-all hover:bg-neutral-900"
-            >
-              <div className="flex items-start justify-between">
-                <div className="flex items-center gap-3">
-                  <div
-                    className={`flex h-10 w-10 items-center justify-center rounded-lg ${product.bg}`}
-                  >
-                    <product.icon className={`h-5 w-5 ${product.color}`} />
-                  </div>
-                  <div>
-                    <p className="text-sm font-semibold leading-none text-white">
-                      {product.name}
-                    </p>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      Item:{" "}
-                      <span className="text-neutral-400">#{product.id}</span>
-                    </p>
-                  </div>
-                </div>
-              </div>
-
-              <div className="flex items-center justify-between border-t border-neutral-800 pt-3">
-                <div className="flex flex-col">
-                  <span className="text-[10px] text-muted-foreground uppercase">
-                    Sales
-                  </span>
-                  <span className="text-sm font-medium text-white">
-                    {product.sales}
-                  </span>
-                </div>
-                <div className="flex flex-col items-end">
-                  <span className="text-[10px] text-muted-foreground uppercase">
-                    Revenue
-                  </span>
-                  <span className="text-sm font-medium text-white">
-                    {formatCurrency(product.revenue)}
-                  </span>
-                </div>
+    <PremiumCard className="h-full flex flex-col min-h-[450px]">
+      <div className="p-6 flex-1 flex flex-col">
+        {/* Header */}
+        <div className="flex items-center justify-between mb-4">
+          <div className="flex items-center gap-3">
+            <div className="p-1 rounded-full bg-gray-100 dark:bg-gray-800/50">
+              <div className="p-1.5 rounded-full bg-blue-600 text-white shadow-sm">
+                <Package size={18} />
               </div>
             </div>
-          ))}
+            <div>
+              <h3 className="font-semibold text-lg text-foreground leading-none">
+                Produtos mais vendidos
+              </h3>
+              <p className="text-xs text-muted-foreground mt-1">
+                Top performance em vendas.
+              </p>
+            </div>
+          </div>
+          <Link href="/products">
+            <Button variant="ghost" size="sm" className="text-xs h-8 px-3">
+              Ver tudo
+            </Button>
+          </Link>
         </div>
-      </CardContent>
-    </Card>
+
+        <div className="h-px w-full bg-border/40 mb-2" />
+
+        {/* Lista Real */}
+        <div className="space-y-1">
+          {products.length === 0 ? (
+            <div className="text-center text-muted-foreground text-sm py-10">
+              Nenhum produto vendido hoje.
+            </div>
+          ) : (
+            products.map((product: any, idx: number) => (
+              <div
+                key={idx}
+                className="flex items-center justify-between p-3 rounded-lg hover:bg-white/5 transition-all cursor-pointer group"
+              >
+                <div className="flex items-center gap-4">
+                  {/* Placeholder de imagem (ou <img> se tiver url) */}
+                  <div className="h-10 w-10 rounded-md flex items-center justify-center overflow-hidden shrink-0 border border-white/5 bg-blue-500/10 text-blue-500">
+                    <Package size={18} />
+                  </div>
+                  <div className="flex flex-col">
+                    <span
+                      className="text-sm font-medium text-foreground truncate max-w-[120px]"
+                      title={product.name}
+                    >
+                      {product.name}
+                    </span>
+                    <span className="text-[11px] text-muted-foreground">
+                      Ranking #{idx + 1}
+                    </span>
+                  </div>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm font-bold text-foreground">
+                    {product.revenue.toLocaleString("pt-BR", {
+                      style: "currency",
+                      currency: "BRL",
+                    })}
+                  </p>
+                  <p className="text-[10px] text-muted-foreground font-medium">
+                    {product.sales} vendas
+                  </p>
+                </div>
+              </div>
+            ))
+          )}
+        </div>
+      </div>
+    </PremiumCard>
   );
 }

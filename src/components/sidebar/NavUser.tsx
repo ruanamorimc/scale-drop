@@ -159,13 +159,13 @@ export function NavUser({ user }: UserProps) {
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
               <DropdownMenuItem asChild>
-                <Link href="/profile">
+                <Link href="/settings">
                   <IconUserCircle />
                   Perfil
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="/billing">
+                <Link href="/settings/billing">
                   <IconCreditCard />
                   Cobrança
                 </Link>

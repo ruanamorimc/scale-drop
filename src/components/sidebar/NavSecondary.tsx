@@ -11,7 +11,7 @@ import {
 const items = [
   {
     title: "Configurações",
-    url: "/settings",
+    url: "/settings/integrations",
     icon: IconSettings,
   },
   {

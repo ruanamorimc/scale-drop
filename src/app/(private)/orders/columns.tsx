@@ -164,7 +164,7 @@ export const columns: ColumnDef<Order>[] = [
         style: "currency",
         currency: "BRL",
       }).format(amount);
-      return <div className=" font-medium text-white">{formatted}</div>;
+      return <div className="text-right font-medium text-white">{formatted}</div>;
     },
   },
 

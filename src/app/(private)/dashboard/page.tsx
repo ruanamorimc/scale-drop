@@ -1,12 +1,15 @@
 import { getServerSession } from "@/lib/get-session";
 import { unauthorized } from "next/navigation";
-import { SectionCards } from "@/components/cards/SectionCards";
 import { SummaryCards } from "@/components/cards/SummaryCards";
 import { ChartBarStacked } from "@/components/cards/ChartsArea";
-import { SideMetrics } from "@/components/cards/SideMetrics";
 import { CardMetrics } from "@/components/cards/CardMetrics";
+import { PaymentConversion } from "@/components/cards/PaymentConversion";
 import { RecentOrdersTable } from "@/components/cards/RecentOrdersTable";
 import { TopProducts } from "@/components/cards/TopProducts";
+import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
+import { getFinanceMetrics } from "@/actions/finance-overview";
+// IMPORTANTE: Importar o Provider
+import { DashboardProvider } from "@/components/dashboard/DashboardContext";
 
 export default async function DashboardPage() {
   const session = await getServerSession();
@@ -14,37 +17,37 @@ export default async function DashboardPage() {
 
   if (!user) unauthorized();
 
+  const financeData = await getFinanceMetrics();
+  const safeData = financeData || {};
+
   return (
-    <main className="px-4 py-4">
-      <div className="space-y-6">
-        <div className="space-y-2">
-          <h1 className="text-2xl font-semibold">Dashboard</h1>
-          <p className="text-muted-foreground mb-4">
-            Bem-vindo(a) de volta! Aqui está o resumo da sua conta.
-          </p>
-        </div>
-      </div>
-      {/* 2. OS 4 CARDS DO TOPO */}
-      <SummaryCards />
+    // 1. Envolver tudo no Provider
+    <DashboardProvider>
+      <main className="px-6 py-6 space-y-6">
+        {/* 2. Passar 'data' para o Header (para Exportar CSV) */}
+        <DashboardHeader data={safeData} />
 
-      {/* 3. O LAYOUT ASSIMÉTRICO (Igual Reportana) */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-4 items-start">
-        {/* Esquerda (Ocupa 3 colunas - 75%) */}
-        <div className="lg:col-span-2 space-y-4">
-          <ChartBarStacked />
-          {/* 2. OS 6 CARDS DE BAIXO */}
-          <CardMetrics />
+        <SummaryCards data={safeData} />
+
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
+          <div className="xl:col-span-2 space-y-6">
+            <ChartBarStacked data={safeData.chartData} />
+            <CardMetrics data={safeData} />
+          </div>
+
+          <div className="xl:col-span-1 h-full">
+            <TopProducts data={safeData} />
+          </div>
+
+          <div className="xl:col-span-3">
+            <PaymentConversion data={safeData} />
+          </div>
         </div>
 
-        {/* Direita (Ocupa 1 coluna - 25%) */}
-        <div className="lg:col-span-1 space-y-4">
-          <SideMetrics />
-          <TopProducts />
-        </div>
-        <div className="lg:col-span-3 space-y-4 ">
+        <div className="w-full">
           <RecentOrdersTable />
         </div>
-      </div>
-    </main>
+      </main>
+    </DashboardProvider>
   );
 }
