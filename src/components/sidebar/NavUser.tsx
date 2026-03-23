@@ -1,6 +1,7 @@
 "use client";
 
-import { authClient } from "@/lib/auth-client"; // Certifique-se que o caminho está certo
+import { authClient } from "@/lib/auth-client";
+import { cn } from "@/lib/utils";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { useTheme } from "next-themes";
@@ -37,6 +38,7 @@ interface UserProps {
     name: string;
     email: string;
     image?: string | null; // Pode vir null do banco
+    plan?: string;
   };
 }
 
@@ -72,6 +74,24 @@ export function NavUser({ user }: UserProps) {
     );
   };
 
+  // Função para retornar a cor exata baseada no plano
+  const getPlanBadgeStyle = (planName: string) => {
+    switch (planName.toUpperCase()) {
+      case "START":
+        // Estilo Verde (baseado no pontinho da sua imagem de precificação)
+        return "bg-emerald-600 text-[10px] px-1.5 py-0.5 rounded text-white font-bold leading-none border-emerald-500/30";
+      case "SCALE":
+        // Estilo Roxo
+        return "bg-purple-600 text-[10px] px-1.5 py-0.5 rounded text-white font-bold leading-none border-purple-500/30";
+      case "PRO":
+        // Estilo Azul Sólido (Igual ao seu print atual)
+        return "bg-blue-600 text-[10px] px-1.5 py-0.5 rounded text-white font-bold leading-none";
+      default:
+        // Estilo fallback caso não tenha plano definido
+        return "bg-zinc-800 text-zinc-400 border-zinc-700";
+    }
+  };
+
   // Função para alternar tema sem fechar o menu bruscamente
   const toggleTheme = (e: React.MouseEvent) => {
     e.preventDefault(); // Evita que o clique feche o menu imediatamente
@@ -96,8 +116,14 @@ export function NavUser({ user }: UserProps) {
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <div className="flex items-center gap-2">
                   <span className="truncate font-medium">{user.name}</span>
-                  <span className="bg-blue-600 text-[10px] px-1.5 py-0.5 rounded text-white font-bold leading-none">
-                    {user.plan || "PRO"}
+                  {/* 🔥 BADGE DINÂMICO AQUI */}
+                  <span
+                    className={cn(
+                      "px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border",
+                      getPlanBadgeStyle(user.plan || "SCALE"), // Pega a cor correspondente
+                    )}
+                  >
+                    {user.plan || "SCALE"}
                   </span>
                 </div>
                 <span className="text-muted-foreground truncate text-xs">

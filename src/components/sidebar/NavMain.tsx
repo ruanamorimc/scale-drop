@@ -1,5 +1,7 @@
+"use client";
+
 import { IconCirclePlusFilled, IconMail } from "@tabler/icons-react";
-import Link from "next/link";
+import { usePathname } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -9,7 +11,6 @@ import {
   SidebarMenuButton,
   SidebarMenuItem,
   SidebarMenuSub,
-  SidebarMenuSubButton,
   SidebarMenuSubItem,
 } from "@/components/ui/sidebar";
 import {
@@ -37,11 +38,15 @@ import {
   CollapsibleTrigger,
 } from "../ui/collapsible";
 
+import { SidebarLink } from "./SidebarLink";
+
+// Adicionei 'exact: true' no "Visão Geral" e no "Resumo"
 const items = [
   {
     title: "Dashboard",
     url: "/dashboard",
     icon: LayoutGrid,
+    exact: true, // Dashboard geralmente é raiz
   },
   {
     title: "Pedidos",
@@ -64,7 +69,7 @@ const items = [
     icon: ChartArea,
     isActive: false,
     items: [
-      { title: "Visão Geral", url: "/finance", icon: PieChart },
+      { title: "Visão Geral", url: "/finance", icon: PieChart, exact: true }, // 🔥 Adicionado exact
       { title: "Taxas", url: "/finance/fees", icon: Percent },
       { title: "Impostos", url: "/finance/taxes", icon: DollarSign },
       { title: "Calculadora", url: "/finance/calculator", icon: Calculator },
@@ -76,7 +81,7 @@ const items = [
     icon: Megaphone,
     isActive: false,
     items: [
-      { title: "Resumo", url: "/marketing", icon: PanelsTopLeft },
+      { title: "Resumo", url: "/marketing", icon: PanelsTopLeft, exact: true }, // 🔥 Adicionado exact
       { title: "Meta", url: "/marketing/meta", icon: Facebook },
       { title: "Google", url: "/marketing/google", icon: Youtube },
       { title: "UTMs", url: "/marketing/utms", icon: Clipboard },
@@ -87,9 +92,12 @@ const items = [
 ];
 
 export function NavMain() {
+  const pathname = usePathname();
+
   return (
     <SidebarGroup>
       <SidebarGroupContent className="flex flex-col gap-2">
+        {/* QUICK CREATE */}
         <SidebarMenu>
           <SidebarMenuItem className="flex items-center gap-2">
             <SidebarMenuButton
@@ -109,23 +117,30 @@ export function NavMain() {
             </Button>
           </SidebarMenuItem>
         </SidebarMenu>
+
+        {/* MENU PRINCIPAL */}
         <SidebarMenu>
-          {items.map((item) => (
-            <Collapsible
-              key={item.title}
-              asChild
-              defaultOpen={item.isActive} // Mantém aberto se estiver na página
-              className="group/collapsible"
-            >
-              <SidebarMenuItem>
-                {/* CASO 1: TEM SUBMENU (Ex: Financeiro) */}
-                {item.items?.length ? (
-                  <>
+          {items.map((item) => {
+            const isChildActive = item.items?.some(
+              (subItem) =>
+                pathname === subItem.url ||
+                pathname.startsWith(`${subItem.url}/`),
+            );
+
+            // CASO 1: TEM SUBMENU
+            if (item.items && item.items.length > 0) {
+              return (
+                <Collapsible
+                  key={item.title}
+                  asChild
+                  defaultOpen={item.isActive || isChildActive}
+                  className="group/collapsible"
+                >
+                  <SidebarMenuItem>
                     <CollapsibleTrigger asChild>
                       <SidebarMenuButton tooltip={item.title}>
                         {item.icon && <item.icon />}
                         <span>{item.title}</span>
-                        {/* A setinha que gira quando abre/fecha */}
                         <ChevronRight className="ml-auto transition-transform duration-200 group-data-[state=open]/collapsible:rotate-90" />
                       </SidebarMenuButton>
                     </CollapsibleTrigger>
@@ -134,29 +149,34 @@ export function NavMain() {
                       <SidebarMenuSub>
                         {item.items.map((subItem) => (
                           <SidebarMenuSubItem key={subItem.title}>
-                            <SidebarMenuSubButton asChild>
-                              <Link href={subItem.url}>
-                                {subItem.icon && <subItem.icon />}
-                                <span>{subItem.title}</span>
-                              </Link>
-                            </SidebarMenuSubButton>
+                            <SidebarLink
+                              url={subItem.url}
+                              title={subItem.title}
+                              icon={subItem.icon}
+                              isSubItem={true}
+                              exact={(subItem as any).exact} // 🔥 Passa a prop exact
+                            />
                           </SidebarMenuSubItem>
                         ))}
                       </SidebarMenuSub>
                     </CollapsibleContent>
-                  </>
-                ) : (
-                  // CASO 2: NÃO TEM SUBMENU (Ex: Dashboard, Produtos)
-                  <SidebarMenuButton asChild tooltip={item.title}>
-                    <Link href={item.url}>
-                      {item.icon && <item.icon />}
-                      <span>{item.title}</span>
-                    </Link>
-                  </SidebarMenuButton>
-                )}
+                  </SidebarMenuItem>
+                </Collapsible>
+              );
+            }
+
+            // CASO 2: ITEM SIMPLES
+            return (
+              <SidebarMenuItem key={item.title}>
+                <SidebarLink
+                  url={item.url}
+                  title={item.title}
+                  icon={item.icon}
+                  exact={(item as any).exact} // 🔥 Passa a prop exact
+                />
               </SidebarMenuItem>
-            </Collapsible>
-          ))}
+            );
+          })}
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>
