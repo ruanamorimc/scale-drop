@@ -1,57 +1,68 @@
 "use server";
 
-import prisma from "@/lib/prisma"; // Importe seu cliente do banco (Prisma, Drizzle, etc)
-import { Order } from "@/app/(private)/orders/columns"; // Importe a tipagem
+import prisma from "@/lib/prisma";
+import { Order } from "@/app/(private)/orders/columns";
 
 export async function getRecentOrders(): Promise<Order[]> {
   try {
-    // 1. Busca no Banco (Exemplo com Prisma)
-    const orders = await db.order.findMany({
-      take: 5, // Pega apenas os 5 últimos
+    const orders = await prisma.order.findMany({
+      take: 5,
       orderBy: {
         createdAt: "desc",
       },
-      include: {
-        customer: true, // Inclui dados do cliente se for uma relação
-      },
     });
 
-    // 2. Mapeia/Transforma os dados do banco para o formato da Tabela
-    // O banco retorna Date objects e números puros, a tabela quer strings formatadas
-    const formattedOrders: Order[] = orders.map((order: any) => {
+    // Mapeia os dados do banco para o formato da Tabela
+    const formattedOrders: Order[] = orders.map((order) => {
       return {
         id: order.id,
-        invoiceId: order.invoiceId || `#INV-${order.id.slice(0, 4)}`, // Fallback se não tiver invoice
+        // Usa orderNumber do banco, se não tiver gera um baseado no ID
+        invoiceId: order.orderNumber
+          ? `#${order.orderNumber}`
+          : `#INV-${order.id.slice(0, 4).toUpperCase()}`,
 
         customer: {
-          name: order.customer?.name || "Cliente Desconhecido",
-          email: order.customer?.email || "sem@email.com",
+          // PEGA OS CAMPOS FLAT DO SEU SCHEMA
+          name: order.customerName || "Cliente Desconhecido",
+          email: order.customerEmail || "sem@email.com",
+          avatar: "", // Seu banco não tem avatar, deixamos vazio
         },
 
-        // Formata Data: "Oct 31, 2024"
+        // Formatação de Data e Hora
         date: new Intl.DateTimeFormat("pt-BR", {
           day: "2-digit",
           month: "short",
           year: "numeric",
-        }).format(order.createdAt),
+        }).format(new Date(order.createdAt)),
 
-        // Formata Hora: "14:30"
         time: new Intl.DateTimeFormat("pt-BR", {
           hour: "2-digit",
           minute: "2-digit",
-        }).format(order.createdAt),
+        }).format(new Date(order.createdAt)),
 
-        paymentStatus: order.paymentStatus, // "paid", "pending", etc.
-        paymentMethod: order.paymentMethod || "Cartão de Crédito",
+        // Converte o Enum do Prisma (PAID) para minusculo (paid) compatível com seu badge
+        paymentStatus: (order.paymentStatus?.toLowerCase() as any) || "pending",
+        paymentMethod: (order.paymentMethod as any) || "Não informado",
 
-        amount: Number(order.totalAmount), // Garante que é número
-        status: order.status, // "delivered", "shipped", etc.
+        // Converte Decimal do Prisma para Number
+        amount: Number(order.total) || 0,
+
+        // COMO ESSES CAMPOS NÃO EXISTEM NO SEU SCHEMA, DEFINIMOS COMO 0
+        // Para ter esses dados, você precisaria criar colunas no schema.prisma
+        cmv: 0,
+        tax: 0,
+        marketing: 0,
+        netProfit: Number(order.total) || 0, // Provisório: Lucro = Total (já que não temos custos)
+
+        // Converte status do Prisma (DELIVERED) para o esperado (delivered)
+        status: order.status?.toLowerCase() || "pending",
+        items: [],
       };
     });
 
     return formattedOrders;
   } catch (error) {
-    console.error("Erro ao buscar pedidos recentes:", error);
-    return []; // Retorna array vazio em caso de erro para não quebrar a tela
+    console.error("Erro ao buscar pedidos:", error);
+    return [];
   }
 }

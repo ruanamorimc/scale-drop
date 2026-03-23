@@ -2,15 +2,8 @@
 
 import { ColumnDef } from "@tanstack/react-table";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Badge } from "@/components/ui/badge";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import {
-  CheckCircle2,
-  Clock,
-  XCircle,
-  MoreHorizontal,
-  ArrowUpDown,
-} from "lucide-react"; // Adicionei ArrowUpDown
+import { MoreHorizontal, ArrowUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import {
   DropdownMenu,
@@ -18,26 +11,36 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { cn } from "@/lib/utils";
 
-// 👇 IMPORTANTE: Trazendo de volta o SEU componente original
 import { StatusBadge } from "@/components/data-table/StatusBadge";
 import { PaymentStatusBadge } from "@/components/data-table/PaymentStatusBadge";
+
+const formatCurrency = (val: number | undefined) => {
+  return new Intl.NumberFormat("pt-BR", {
+    style: "currency",
+    currency: "BRL",
+  }).format(val || 0);
+};
 
 export type Order = {
   id: string;
   invoiceId: string;
   date: string;
-  time?: string; // Opcional caso não tenha nos dados antigos
+  time?: string;
   customer: {
     name: string;
     email: string;
     avatar?: string;
   };
-  // 👇 Mantive os nomes que vi no seu print de erro/dados
   paymentStatus: "paid" | "pending" | "cancelled" | "refunded";
   paymentMethod: "Cartão de Crédito" | "Pix" | "Boleto";
   amount: number;
-  status: string; // <--- VOLTAMOS PARA "status" (antes estava deliveryStatus)
+  cmv?: number;
+  tax?: number;
+  marketing?: number;
+  netProfit?: number;
+  status: string;
   items?: {
     name: string;
     price: number;
@@ -72,19 +75,20 @@ export const columns: ColumnDef<Order>[] = [
     enableHiding: false,
   },
 
-  // 2. PEDIDO (ID + DATA) - O novo visual que você gostou
+  // 2. PEDIDO
   {
     accessorKey: "invoiceId",
     header: "Pedido",
     cell: ({ row }) => {
       return (
-        <div className="flex flex-col gap-1">
-          <span className="font-bold text-white">
+        <div className="flex flex-col gap-1 min-w-[80px]">
+          {/* CORRIGIDO: text-foreground */}
+          <span className="font-bold text-foreground text-sm">
             {row.getValue("invoiceId")}
           </span>
-          {/* Fallback seguro caso 'time' não exista ainda */}
-          <span className="text-xs text-muted-foreground flex items-center gap-1">
-            {row.original.date}{" "}
+          {/* CORRIGIDO: text-muted-foreground */}
+          <span className="text-[11px] text-muted-foreground flex items-center gap-1">
+            {row.original.date}
             {row.original.time ? `, ${row.original.time}` : ""}
           </span>
         </div>
@@ -99,20 +103,23 @@ export const columns: ColumnDef<Order>[] = [
     cell: ({ row }) => {
       const customer = row.original.customer;
       return (
-        <div className="flex items-center gap-3">
-          <Avatar className="h-9 w-9 border border-neutral-800">
+        <div className="flex items-center gap-3 min-w-[180px]">
+          {/* CORRIGIDO: border-border */}
+          <Avatar className="h-8 w-8 border border-border">
             <AvatarImage src={customer.avatar} />
-            <AvatarFallback className="bg-neutral-800 text-xs text-neutral-400">
+            {/* CORRIGIDO: bg-muted text-muted-foreground */}
+            <AvatarFallback className="bg-muted text-[10px] text-muted-foreground font-bold">
               {customer.name
                 ? customer.name.substring(0, 2).toUpperCase()
-                : "Cli"}
+                : "CLI"}
             </AvatarFallback>
           </Avatar>
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-neutral-200">
+          <div className="flex flex-col overflow-hidden">
+            {/* CORRIGIDO: text-foreground */}
+            <span className="text-sm font-medium text-foreground truncate max-w-[140px]">
               {customer.name}
             </span>
-            <span className="text-xs text-muted-foreground hidden sm:inline">
+            <span className="text-[11px] text-muted-foreground truncate max-w-[140px]">
               {customer.email}
             </span>
           </div>
@@ -121,21 +128,17 @@ export const columns: ColumnDef<Order>[] = [
     },
   },
 
-  // 4. PAGAMENTO (Visual novo colorido)
+  // 4. PAGAMENTO
   {
     accessorKey: "paymentStatus",
     header: "Pagamento",
     cell: ({ row }) => {
       const status = row.getValue("paymentStatus") as string;
       const method = row.original.paymentMethod;
-
       return (
-        <div className="flex flex-col items-start gap-1">
-          {/* Chamamos o componente isolado aqui 👇 */}
+        <div className="flex flex-col items-start gap-1 min-w-[100px]">
           <PaymentStatusBadge status={status} />
-
-          {/* O método de pagamento continua aqui embaixo pequenininho */}
-          <span className="text-[10px] text-muted-foreground ml-1">
+          <span className="text-[10px] text-muted-foreground ml-1 truncate max-w-[100px]">
             {method}
           </span>
         </div>
@@ -143,64 +146,128 @@ export const columns: ColumnDef<Order>[] = [
     },
   },
 
-  // 5. TOTAL
+  // 5. RECEITA
   {
     accessorKey: "amount",
-    header: ({ column }) => {
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        className="px-0 font-medium text-muted-foreground hover:text-foreground"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+      >
+        Receita <ArrowUpDown className="ml-2 h-3 w-3" />
+      </Button>
+    ),
+    cell: ({ row }) => (
+      // CORRIGIDO: text-foreground (ou um cinza escuro)
+      <div className="font-medium text-center text-foreground/90">
+        {formatCurrency(row.getValue("amount"))}
+      </div>
+    ),
+  },
+
+  // 6. CUSTO PRODUTO (CMV)
+  {
+    accessorKey: "cmv",
+    header: "Custo (CMV)",
+    cell: ({ row }) => (
+      <div className="text-center text-muted-foreground text-sm">
+        {formatCurrency(row.original.cmv)}
+      </div>
+    ),
+  },
+
+  // 7. TAXAS
+  {
+    accessorKey: "tax",
+    header: "Taxas",
+    cell: ({ row }) => (
+      <div className="text-center text-muted-foreground text-sm">
+        {formatCurrency(row.original.tax)}
+      </div>
+    ),
+  },
+
+  // 8. MARKETING
+  {
+    accessorKey: "marketing",
+    header: "Marketing",
+    cell: ({ row }) => (
+      <div className="text-center text-muted-foreground text-sm">
+        {formatCurrency(row.original.marketing)}
+      </div>
+    ),
+  },
+
+  // 9. LUCRO LÍQUIDO
+  {
+    accessorKey: "netProfit",
+    header: ({ column }) => (
+      <Button
+        variant="ghost"
+        className="px-0 font-medium text-muted-foreground hover:text-foreground w-full justify-end"
+        onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
+      >
+        Lucro Líquido <ArrowUpDown className="ml-2 h-3 w-3" />
+      </Button>
+    ),
+    cell: ({ row }) => {
+      const profit = row.original.netProfit || 0;
       return (
-        <Button
-          variant="ghost"
-          onClick={() => column.toggleSorting(column.getIsSorted() === "asc")}
-          className="text-right w-full justify-end px-0"
-        >
-          Total
-          <ArrowUpDown className="ml-2 h-4 w-4" />
-        </Button>
+        <div className="text-right">
+          <span
+            className={cn(
+              "px-2 py-1 rounded-md text-xs font-bold border",
+              // Essas cores (emerald/red) funcionam bem em light e dark
+              profit > 0
+                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-500 border-emerald-500/20"
+                : "bg-red-500/10 text-red-600 dark:text-red-500 border-red-500/20",
+            )}
+          >
+            {formatCurrency(profit)}
+          </span>
+        </div>
       );
     },
-    cell: ({ row }) => {
-      const amount = parseFloat(row.getValue("amount"));
-      const formatted = new Intl.NumberFormat("pt-BR", {
-        style: "currency",
-        currency: "BRL",
-      }).format(amount);
-      return <div className="text-right font-medium text-white">{formatted}</div>;
-    },
   },
 
-  // 6. STATUS DE ENTREGA (AQUI ESTÁ A CORREÇÃO!)
+  // 10. STATUS ENTREGA
   {
-    accessorKey: "status", // <--- Voltamos para "status" para bater com seus dados
-    header: "Entrega",
-    cell: ({ row }) => {
-      // 👇 AQUI: Usamos o SEU componente original que já trata as cores
-      // Ele deve aceitar a string "status" que vem do dado
-      return <StatusBadge status={row.getValue("status")} />;
-    },
+    accessorKey: "status",
+    header: ({ column }) => <div className="text-center w-full">Status</div>,
+    cell: ({ row }) => (
+      <div className="flex justify-center">
+        <StatusBadge status={row.getValue("status")} />
+      </div>
+    ),
   },
 
-  // 7. AÇÕES
+  // 11. AÇÕES
   {
     id: "actions",
     cell: ({ row }) => {
-      const payment = row.original;
       return (
         <DropdownMenu>
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
-              className="h-8 w-8 p-0"
+              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
               onClick={(e) => e.stopPropagation()}
             >
               <span className="sr-only">Abrir menu</span>
               <MoreHorizontal className="h-4 w-4" />
             </Button>
           </DropdownMenuTrigger>
+          {/* CORRIGIDO: Removido bg-zinc-950, usando o padrão do componente (bg-popover) */}
           <DropdownMenuContent align="end">
             <DropdownMenuItem
-              onClick={() => navigator.clipboard.writeText(payment.id)}
+              onClick={() => navigator.clipboard.writeText(row.original.id)}
+              className="cursor-pointer"
             >
               Copiar ID Interno
+            </DropdownMenuItem>
+            <DropdownMenuItem className="cursor-pointer">
+              Ver Detalhes
             </DropdownMenuItem>
           </DropdownMenuContent>
         </DropdownMenu>

@@ -111,7 +111,7 @@
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
   --destructive-foreground: oklch(0.985 0 0);
-  --border: oklch(1 0 0 / 10%);
+  --border: oklch(100% 0.00011 271.152 / 0.102);
   --input: oklch(1 0 0 / 15%);
   --ring: oklch(0.556 0 0);
   --chart-1: oklch(0.488 0.243 264.376);
@@ -134,6 +134,58 @@
   --success: oklch(69.845% 0.17027 149.439);
   --failed: oklch(67.64% 0.15294 28.013);
   --expired: oklch(60.325% 0.00007 271.152);
+}
+
+/* Customização do Placeholder do React Grid Layout */
+.react-grid-placeholder {
+  background: rgba(
+    59,
+    130,
+    246,
+    0.3
+  ) !important; /* Azul translúcido (Blue-500) */
+  border: 2px dashed #3b82f6 !important; /* Borda tracejada azul */
+  border-radius: 0.75rem !important; /* Arredondamento (rounded-xl) */
+  opacity: 0.8 !important;
+  z-index: 10 !important;
+}
+
+/* Remove a imagem de fundo padrão (a setinha azul) do handler de resize */
+.react-resizable-handle {
+  background-image: none !important;
+}
+
+/* Opcional: Aumenta um pouco a área de clique invisível no canto para facilitar */
+.react-resizable-handle-se {
+  width: 20px;
+  height: 20px;
+  right: 0;
+  bottom: 0;
+}
+
+/* ===== BARRA DE ROLAGEM CUSTOMIZADA (Light & Dark Mode) ===== */
+.custom-scrollbar::-webkit-scrollbar {
+  width: 4px; /* Um pouquinho mais larga para facilitar o clique */
+}
+.custom-scrollbar::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+/* ☀️ LIGHT MODE (Cores Padrão) */
+.custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #cbd5e1; /* Cinza claro suave */
+  border-radius: 6px;
+}
+.custom-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: #94a3b8; /* Cinza um pouco mais escuro no hover */
+}
+
+/* 🌙 DARK MODE (Ativado pela classe .dark do Shadcn) */
+.dark .custom-scrollbar::-webkit-scrollbar-thumb {
+  background: #3f3f46; /* Zinco 700 - Combina com o fundo escuro */
+}
+.dark .custom-scrollbar:hover::-webkit-scrollbar-thumb {
+  background: #52525b; /* Zinco 600 no hover */
 }
 
 @layer base {

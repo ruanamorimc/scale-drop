@@ -25,126 +25,116 @@ export function OrderDetails({ order, onClose }: OrderDetailsProps) {
   if (!order) return null;
 
   return (
-    // 1. WRAPPER: Centraliza e dá margem externa para o card flutuar
-    <div className="h-full flex items-center justify-end p-4 animate-in slide-in-from-right duration-300">
-      {/* 2. O CARD: Usando cores semânticas (bg-card, border-border) */}
-      <div className="w-[380px] h-full bg-card border border-border rounded-xl shadow-2xl flex flex-col overflow-hidden p-4">
-        {/* --- HEADER --- */}
-        {/* Usando bg-muted/40 para um contraste sutil no header */}
-        <div className="border-b border-border bg-muted/40 flex flex-col gap-4">
-          {/* LINHA 1: ID e Botão Fechar */}
+    // 1. WRAPPER: Centraliza e anima a entrada
+    <div className="h-full flex items-center justify-end p-4 animate-in slide-in-from-right duration-500 fade-in">
+      {/* 2. CARD PREMIUM FLUTUANTE */}
+      <div className="w-[400px] h-full max-h-[95vh] bg-card border border-border/50 rounded-2xl shadow-2xl flex flex-col overflow-hidden relative">
+        {/* --- HEADER (Limpo e Transparente) --- */}
+        <div className="p-6 pb-2 flex flex-col gap-4 relative z-10">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              {/* text-foreground se adapta ao tema */}
-              <h2 className="text-lg font-bold text-foreground tracking-tight">
+              <h2 className="text-xl font-bold text-foreground tracking-tight">
                 Pedido {order.invoiceId}
               </h2>
               <button
                 onClick={() => navigator.clipboard.writeText(order.invoiceId)}
-                className="text-muted-foreground hover:text-foreground transition-colors p-1"
+                className="text-muted-foreground hover:text-foreground transition-colors p-1.5 rounded-md hover:bg-muted"
                 title="Copiar ID"
               >
-                <Copy className="w-3 h-3" />
+                <Copy className="w-3.5 h-3.5" />
               </button>
             </div>
 
             <Button
-              variant="outline"
+              variant="ghost"
               size="icon"
               onClick={onClose}
-              className="h-8 w-8 -mr-2 text-muted-foreground hover:text-foreground hover:bg-muted rounded-md"
+              className="h-8 w-8 text-muted-foreground hover:text-red-500/80 hover:bg-muted rounded-full "
             >
-              <X className="h-4 w-4" />
+              <X className="h-4 w-4 " />
             </Button>
           </div>
 
-          {/* LINHA 2: Status e Data */}
-          <div className="mb-2 flex items-center gap-2">
+          <div className="flex items-center gap-3">
             <StatusBadge status={order.status} />
-
-            <div className="flex items-center gap-1.5 text-[10px] text-muted-foreground font-mono">
-              <span>{order.date}</span>
-              {order.time && (
-                <>
-                  <span className="opacity-50">•</span>
-                  <span>{order.time}</span>
-                </>
-              )}
-            </div>
+            <span className="text-xs text-muted-foreground font-medium">
+              {order.date} • {order.time}
+            </span>
           </div>
         </div>
 
-        {/* --- CONTEÚDO --- */}
-        {/* Removido bg-color fixo */}
-        <ScrollArea className="flex-1">
-          <div className="p-5 space-y-6">
-            {/* Seção Cliente */}
-            <div>
-              <div className="flex items-center justify-between mb-3 pt-2">
-                <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider">
+        {/* --- CONTEÚDO (Scrollável) --- */}
+        <ScrollArea className="flex-1 -mr-3 pr-3">
+          {" "}
+          {/* Ajuste para scrollbar não colar na borda */}
+          <div className="p-6 pt-2 space-y-8">
+            {/* SEÇÃO CLIENTE */}
+            <div className="space-y-3">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
                   Cliente
                 </h3>
-                <Button
-                  variant="link"
-                  className="h-auto p-0 text-[10px] text-primary hover:underline flex items-center gap-1"
+                <a
+                  href="#"
+                  className="text-xs text-primary hover:text-primary/80 flex items-center gap-1 font-medium transition-colors"
                 >
                   Ver perfil <ExternalLink className="w-3 h-3" />
-                </Button>
+                </a>
               </div>
 
-              <div className="flex items-center gap-3">
-                <Avatar className="h-10 w-10 border border-border">
+              <div className="flex items-center gap-4 p-3 rounded-xl border border-border/50 bg-muted/20">
+                <Avatar className="h-12 w-12 border border-border">
                   <AvatarImage src={order.customer.avatar} />
-                  <AvatarFallback className="bg-muted text-muted-foreground text-xs font-bold">
+                  <AvatarFallback className="bg-background text-foreground text-sm font-bold">
                     {order.customer.name.substring(0, 2).toUpperCase()}
                   </AvatarFallback>
                 </Avatar>
                 <div className="flex flex-col">
-                  <span className="font-medium text-sm text-foreground line-clamp-1">
+                  <span className="font-semibold text-sm text-foreground">
                     {order.customer.name}
                   </span>
-                  <span className="text-xs text-muted-foreground line-clamp-1">
+                  <span className="text-xs text-muted-foreground">
                     {order.customer.email}
                   </span>
                 </div>
               </div>
             </div>
 
-            <Separator />
+            <Separator className="bg-border/50" />
 
-            {/* Seção Itens */}
-            <div>
-              <h3 className="text-[10px] font-bold text-muted-foreground uppercase tracking-wider mb-3">
-                Itens ({order.items?.length || 0})
-              </h3>
+            {/* SEÇÃO ITENS */}
+            <div className="space-y-4">
+              <div className="flex items-center justify-between">
+                <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                  Itens ({order.items?.length || 0})
+                </h3>
+              </div>
 
               <div className="space-y-3">
                 {order.items?.map((item, index) => (
-                  <div key={index} className="flex gap-3 items-start group">
-                    {/* Fundo da imagem neutro (bg-muted) */}
-                    <div className="h-12 w-12 min-w-[3rem] min-h-[3rem] bg-muted/50 rounded-lg border border-border flex items-center justify-center shrink-0 overflow-hidden p-2 relative">
+                  <div key={index} className="flex gap-4 items-start group">
+                    <div className="h-14 w-14 bg-muted/30 rounded-lg border border-border/50 flex items-center justify-center shrink-0 overflow-hidden p-2">
                       {item.image ? (
                         // eslint-disable-next-line @next/next/no-img-element
                         <img
                           src={item.image}
                           alt={item.name}
-                          // Removido mix-blend-multiply que quebra no modo claro
                           className="w-full h-full object-contain"
                         />
                       ) : (
-                        <Package className="w-5 h-5 text-muted-foreground" />
+                        <Package className="w-6 h-6 text-muted-foreground/50" />
                       )}
                     </div>
 
-                    <div className="flex-1 min-w-0 pt-0.5">
-                      <p className="text-xs font-medium text-foreground line-clamp-2 leading-snug">
+                    <div className="flex-1 min-w-0 py-0.5 space-y-1">
+                      <p className="text-sm font-medium text-foreground line-clamp-2 leading-tight">
                         {item.name}
                       </p>
-                      <div className="flex justify-between items-center mt-1.5">
-                        <div className="text-[10px] text-muted-foreground bg-muted px-1.5 py-0.5 rounded border border-border">
-                          x{item.quantity}
-                        </div>
-                        <span className="text-xs font-semibold text-foreground">
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs text-muted-foreground bg-muted/50 px-2 py-0.5 rounded border border-border/30">
+                          Qtd: {item.quantity}
+                        </span>
+                        <span className="text-sm font-semibold text-foreground">
                           {new Intl.NumberFormat("pt-BR", {
                             style: "currency",
                             currency: "BRL",
@@ -156,72 +146,76 @@ export function OrderDetails({ order, onClose }: OrderDetailsProps) {
                 ))}
 
                 {(!order.items || order.items.length === 0) && (
-                  <div className="flex flex-col items-center justify-center py-6 text-muted-foreground border border-dashed border-border rounded-lg bg-muted/20">
-                    <Package className="w-6 h-6 mb-2 opacity-50" />
-                    <p className="text-xs">Nenhum item neste pedido</p>
+                  <div className="flex flex-col items-center justify-center py-8 text-muted-foreground border border-dashed border-border/60 rounded-xl bg-muted/10">
+                    <Package className="w-8 h-8 mb-2 opacity-40" />
+                    <p className="text-xs font-medium">
+                      Nenhum item neste pedido
+                    </p>
                   </div>
                 )}
               </div>
             </div>
 
-            <Separator />
+            <Separator className="bg-border/50" />
 
-            {/* Seção Financeira */}
-            {/* Usando bg-muted/30 para o bloco financeiro */}
-            <div className="bg-muted/30 p-4 rounded-xl border border-border space-y-3">
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-muted-foreground flex items-center gap-2">
-                  Método
-                </span>
-                {/* Badge de método de pagamento adaptável */}
-                <div className="flex items-center gap-1.5 text-foreground font-medium bg-background px-2 py-1 rounded border border-border">
-                  <CreditCard className="w-3 h-3" /> {order.paymentMethod}
+            {/* SEÇÃO FINANCEIRA */}
+            <div className="space-y-4">
+              <h3 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider">
+                Pagamento
+              </h3>
+              <div className="bg-muted/20 p-5 rounded-xl border border-border/50 space-y-4">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground">Método</span>
+                  <div className="flex items-center gap-2 text-foreground font-medium">
+                    <CreditCard className="w-4 h-4 text-muted-foreground" />
+                    {order.paymentMethod}
+                  </div>
                 </div>
-              </div>
-              <div className="flex justify-between items-center text-xs">
-                <span className="text-muted-foreground">Status</span>
-                <div className="scale-90 origin-right">
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-muted-foreground">Status</span>
                   <PaymentStatusBadge status={order.paymentStatus} />
                 </div>
-              </div>
 
-              <div className="pt-3 mt-3 border-t border-border flex justify-between items-end">
-                <span className="text-xs text-muted-foreground pb-0.5">
-                  Total Pago
-                </span>
-                <span className="text-lg font-bold text-foreground tracking-tight">
-                  {new Intl.NumberFormat("pt-BR", {
-                    style: "currency",
-                    currency: "BRL",
-                  }).format(order.amount)}
-                </span>
+                <Separator className="bg-border/50" />
+
+                <div className="flex justify-between items-end">
+                  <span className="text-sm text-muted-foreground pb-0.5">
+                    Total Pago
+                  </span>
+                  <span className="text-xl font-bold text-foreground tracking-tight">
+                    {new Intl.NumberFormat("pt-BR", {
+                      style: "currency",
+                      currency: "BRL",
+                    }).format(order.amount)}
+                  </span>
+                </div>
               </div>
             </div>
           </div>
         </ScrollArea>
 
-        {/* --- FOOTER (Ações) --- */}
-        {/* Usando bg-muted/40 para o footer */}
-        <div className="p-4 mt-4 border-t border-border bg-muted/40 grid grid-cols-3 gap-2">
+        {/* --- FOOTER (Limpo e Sem Fundo) --- */}
+        <div className="p-6 pt-2 grid grid-cols-4 gap-3 bg-gradient-to-t from-card to-transparent">
           <Button
             variant="outline"
-            className="border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground h-10 flex flex-col gap-0 rounded-lg group"
+            className="col-span-2 border-border/60 hover:bg-muted hover:text-foreground h-11 rounded-xl gap-2 transition-all hover:border-border"
           >
-            <span className="text-[10px] font-medium flex items-center gap-1.5">
-              <MapPin className="w-3.5 h-3.5 transition-colors" /> Rastrear
-            </span>
+            <MapPin className="w-4 h-4" />
+            <span className="text-xs font-semibold">Rastrear</span>
           </Button>
+
           <Button
             variant="outline"
-            className="border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground h-10 flex flex-col gap-0 rounded-lg group"
+            className="col-span-1 border-border/60 hover:bg-muted hover:text-foreground h-11 rounded-xl px-0"
+            title="Reembolso"
           >
-            <span className="text-[10px] font-medium flex items-center gap-1.5">
-              <RotateCcw className="w-3.5 h-3.5 transition-colors" /> Reembolso
-            </span>
+            <RotateCcw className="w-4 h-4" />
           </Button>
+
           <Button
             variant="outline"
-            className="border-border bg-background hover:bg-muted text-muted-foreground hover:text-foreground h-10 flex items-center justify-center rounded-lg"
+            className="col-span-1 border-border/60 hover:bg-muted hover:text-foreground h-11 rounded-xl px-0"
+            title="Mais opções"
           >
             <MoreHorizontal className="w-4 h-4" />
           </Button>

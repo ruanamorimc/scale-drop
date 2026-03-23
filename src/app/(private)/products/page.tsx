@@ -69,32 +69,31 @@ export default function ProductsPage() {
   const [storeFilter, setStoreFilter] = useState("all");
 
   // Novos estados para guardar as regras fiscais
-const [globalFees, setGlobalFees] = useState<Fee[]>([]);
-const [globalTaxes, setGlobalTaxes] = useState<Tax[]>([]);
+  const [globalFees, setGlobalFees] = useState<Fee[]>([]);
+  const [globalTaxes, setGlobalTaxes] = useState<Tax[]>([]);
 
   // Atualize o loadData para buscar tudo junto
   const loadData = async () => {
-  setIsLoading(true);
-  try {
-    // Busca tudo de uma vez (Paralelo = Mais rápido)
-    const [productsData, feesData, taxesData] = await Promise.all([
-      getProducts(),
-      getFees(),
-      getTaxes()
-    ]);
+    setIsLoading(true);
+    try {
+      // Busca tudo de uma vez (Paralelo = Mais rápido)
+      const [productsData, feesData, taxesData] = await Promise.all([
+        getProducts(),
+        getFees(),
+        getTaxes(),
+      ]);
 
-    // O compilador pode reclamar se o tipo do getProducts não bater exato, 
-    // mas vamos garantir que ele aceite
-    setData(productsData); 
-    setGlobalFees(feesData as Fee[]);
-    setGlobalTaxes(taxesData as Tax[]);
-    
-  } catch (error) {
-    toast.error("Erro ao carregar dados.");
-  } finally {
-    setIsLoading(false);
-  }
-};
+      // O compilador pode reclamar se o tipo do getProducts não bater exato,
+      // mas vamos garantir que ele aceite
+      setData(productsData);
+      setGlobalFees(feesData as Fee[]);
+      setGlobalTaxes(taxesData as Tax[]);
+    } catch (error) {
+      toast.error("Erro ao carregar dados.");
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // 🧠 LÓGICA INTELIGENTE: Extrai categorias e lojas únicas dos dados carregados
   const uniqueCategories = useMemo(() => {
@@ -107,19 +106,6 @@ const [globalTaxes, setGlobalTaxes] = useState<Tax[]>([]);
     const stores = data.map((p) => p.store).filter(Boolean) as string[];
     return Array.from(new Set(stores)).sort();
   }, [data]);
-
-  // --- 1. BUSCAR DADOS DO BANCO (LOAD) ---
-/*   const loadData = async () => {
-    setIsLoading(true);
-    try {
-      const products = await getProducts();
-      setData(products);
-    } catch (error) {
-      toast.error("Erro ao carregar produtos");
-    } finally {
-      setIsLoading(false);
-    }
-  }; */
 
   // Carrega ao abrir a página
   useEffect(() => {
@@ -162,6 +148,13 @@ const [globalTaxes, setGlobalTaxes] = useState<Tax[]>([]);
   }, [filteredData]);
 
   // --- 3. ACTIONS DE INTERFACE ---
+
+  // 👇 NOVA FUNÇÃO: Atualiza e mostra o Toast
+  const handleRefresh = async () => {
+    await loadData();
+    toast.success("Produtos atualizados com sucesso!");
+  };
+
   const handleEditClick = (product: Product) => {
     setEditingProduct(product);
     setIsSheetOpen(true);
@@ -174,26 +167,6 @@ const [globalTaxes, setGlobalTaxes] = useState<Tax[]>([]);
     toast.success("10 Produtos de teste gerados!");
     setIsLoading(false);
   };
-
-  // Caso queria criar um produto novo, pode usar essa função para abrir a sheet com um produto "vazio".
-  /*   const handleAddClick = () => {
-    setEditingProduct({
-        id: "NOVO",
-        title: "",
-        salePrice: 0,
-        costPrice: 0,
-        stock: 0,
-        status: "active",
-        image: "",
-        taxML: 0,
-        shipping: 0,
-        category: "",
-        store: "",
-        sku: "",
-        externalId: ""
-    } as Product);
-    setIsSheetOpen(true);
-  } */
 
   // --- 4. SALVAR NO BANCO (CREATE / UPDATE) ---
   const handleSaveProduct = async (updatedProduct: Product) => {
@@ -262,7 +235,7 @@ const [globalTaxes, setGlobalTaxes] = useState<Tax[]>([]);
           {/* ... dentro da div do Header ... */}
           <div className="flex items-center gap-2">
             {/* BOTÃO MÁGICO DE TESTE (Remova depois) */}
-            {/*             <Button
+            {/* <Button
               variant="default"
               onClick={handleSeedData}
               disabled={isLoading}
@@ -273,18 +246,15 @@ const [globalTaxes, setGlobalTaxes] = useState<Tax[]>([]);
           </div>
           <Button
             variant="default"
-            onClick={loadData}
+            onClick={handleRefresh} // 👈 ALTERADO: Agora chama a nova função com Toast
             disabled={isLoading}
-            className="border-dashed"
+            className="text-white bg-blue-600 transition-all duration-300 hover:bg-blue-700 hover:shadow-[0_0_10px_1px_rgba(37,99,235,0.6)] hover:-translate-y-0.5"
           >
             <RefreshCw
               className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
             />
             {isLoading ? "Carregando..." : "Atualizar Produtos"}
           </Button>
-          {/* <Button onClick={handleAddClick}>
-                <Plus className="mr-2 h-4 w-4" /> Adicionar Produto
-            </Button> */}
         </div>
       </div>
 
@@ -407,8 +377,8 @@ const [globalTaxes, setGlobalTaxes] = useState<Tax[]>([]);
               onEdit: handleEditClick,
               onDelete: handleDeleteClick,
               // 👇 PASSAMOS AS REGRAS PARA AS COLUNAS AQUI | TAXA E IMPOSTO
-            fees: globalFees,
-            taxes: globalTaxes,
+              fees: globalFees,
+              taxes: globalTaxes,
             }}
           />
         )}

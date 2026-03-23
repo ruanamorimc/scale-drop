@@ -46,6 +46,12 @@ model User {
   taxes                 Tax[]
   fixedExpenses         FixedExpense[]
 
+  // 🔥 NOVO CAMPO PARA O GRID:
+  dashboardLayout Json?
+
+  // 🔥 NOVO CAMPO PARA AS TABELAS DE UTMS:
+  preferences   Json?     @default("{}")
+
   @@unique([email])
   @@index([accessStatus])
   @@map("user")

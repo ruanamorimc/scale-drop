@@ -38,10 +38,10 @@ export default async function IntegrationsPage() {
       </div>
 
       {/* 3. Passa o status verdadeiro para o componente */}
-      <Separator />
-      <form action={testImportProductsAction}>
+
+      {/*       <form action={testImportProductsAction}>
         <Button type="submit">TESTAR IMPORTAÇÃO (Olhar Terminal)</Button>
-      </form>
+      </form> */}
       <IntegrationsList isMLConnected={isMLConnected} />
     </div>
   );

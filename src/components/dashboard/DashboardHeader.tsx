@@ -27,7 +27,7 @@ import { toast } from "sonner";
 // --- ESTILO PREMIUM PADRÃO PARA INPUTS DO HEADER ---
 // H-9 (altura menor), fundo translúcido escuro, borda sutil, blur, texto mais leve.
 const HEADER_INPUT_STYLE = cn(
-  "h-9 bg-zinc-950/40 hover:bg-zinc-900/60 border-white/10 text-muted-foreground hover:text-foreground text-sm transition-all backdrop-blur-md shadow-sm font-normal",
+  "h-10 bg-zinc-950/40 hover:bg-zinc-900/60 border-white/10 text-muted-foreground hover:text-foreground text-sm transition-all backdrop-blur-md shadow-sm font-normal",
 );
 
 // Mock de Produtos
