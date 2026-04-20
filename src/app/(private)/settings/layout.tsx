@@ -12,7 +12,7 @@ const sidebarNavItems = [
   { title: "Segurança", href: "/settings/security" },
   { title: "Planos e Cobrança", href: "/settings/billing" },
   { title: "Integrações", href: "/settings/integrations" }, // Nossa futura integração ML
-  /* { title: "Notificações", href: "/settings/notifications" }, */
+  { title: "Códigos e Scripts", href: "/settings/scripts" },
 ];
 
 interface SettingsLayoutProps {
