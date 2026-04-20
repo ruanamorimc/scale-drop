@@ -40,6 +40,16 @@ export default async function IntegrationsPage() {
     ? `${appUrl}/api/webhooks/yampi?id=${yampiIntegration.id}`
     : null;
 
+    // 1. Busca a Cartpanda no banco
+  const cartpandaIntegration = await prisma.storeIntegration.findFirst({
+    where: { userId: session.user.id, platform: "CARTPANDA" },
+  });
+
+  const isCartpandaConnected = !!cartpandaIntegration;
+  const cartpandaUrl = cartpandaIntegration
+    ? `${appUrl}/api/webhooks/cartpanda?id=${cartpandaIntegration.id}`
+    : null;
+
   return (
     <div className="space-y-6">
       <div>
@@ -59,6 +69,8 @@ export default async function IntegrationsPage() {
         userId={session.user.id}
         isYampiConnected={isYampiConnected}
         yampiUrl={yampiUrl}
+        isCartpandaConnected={isCartpandaConnected}
+        cartpandaUrl={cartpandaUrl}
       />
     </div>
   );

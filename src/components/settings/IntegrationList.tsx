@@ -24,13 +24,15 @@ import { PremiumCard } from "@/components/cards/PremiumCard";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-// Server Actions
+// Server Actions - Desconectar e Conectar
 import { connectMercadoLivreAction } from "@/actions/mercadolivre-actions";
-import { disconnectYampiIntegration } from "@/actions/yampi-actions"; // 🔥 Ação de desconectar a Yampi
+import { disconnectYampiIntegration } from "@/actions/yampi-actions";
+import { disconnectCartpandaIntegration } from "@/actions/cartpanda-actions";
 
 // Sheets (Modais Laterais)
 import { MetaAssetsSheet } from "./MetaAssetsSheet";
-import { YampiSheet } from "./YampiSheet"; // 🔥 Modal da Yampi
+import { YampiSheet } from "./YampiSheet";
+import { CartpandaSheet } from "./CartpandaSheet";
 
 // ==========================================
 // INTERFACES & CONSTANTES
@@ -40,6 +42,8 @@ interface IntegrationsListProps {
   userId: string;
   isYampiConnected?: boolean; // 🔥 Prop recebida da page.tsx
   yampiUrl?: string | null; // 🔥 Prop recebida da page.tsx
+  isCartpandaConnected?: boolean;
+  cartpandaUrl?: string | null;
 }
 
 const CATEGORIES = [
@@ -56,6 +60,8 @@ export function IntegrationsList({
   userId,
   isYampiConnected = false,
   yampiUrl = null,
+  isCartpandaConnected = false,
+  cartpandaUrl = null,
 }: IntegrationsListProps) {
   // ==========================================
   // ESTADOS DO COMPONENTE
@@ -71,6 +77,17 @@ export function IntegrationsList({
 
   const [isFbModalOpen, setIsFbModalOpen] = useState(false);
   const [isYampiModalOpen, setIsYampiModalOpen] = useState(false); // 🔥 Controle do Modal da Yampi
+
+  // Controle Modal da Cartpanda)
+  const [isCartpandaModalOpen, setIsCartpandaModalOpen] = useState(false);
+
+  const handleDisconnectCartpanda = async () => {
+    const res = await disconnectCartpandaIntegration(userId);
+    if (res.success) {
+      toast.info("Cartpanda desconectada.");
+      setIsCartpandaModalOpen(false);
+    }
+  };
 
   // ==========================================
   // EFEITOS
@@ -241,9 +258,9 @@ export function IntegrationsList({
       logoUrl: "/logos/cartpanda.png",
       description:
         "Plataforma completa com checkout transparente e recuperação de carrinhos.",
-      isConnected: false,
+      isConnected: isCartpandaConnected, // 🔥 Lê o status dinâmico
       category: "checkout",
-      isComingSoon: true,
+      isComingSoon: false, // 🔥 Ativado para configuração
       logoClass: "rounded-md",
     },
     {
@@ -340,7 +357,9 @@ export function IntegrationsList({
                     <h3 className="text-xl font-bold text-foreground tracking-tight flex items-center gap-2">
                       {app.name}
                       {app.isConnected &&
-                        (app.id === "facebook" || app.id === "yampi") && (
+                        (app.id === "facebook" ||
+                          app.id === "yampi" ||
+                          app.id === "cartpanda") && (
                           <CheckCircle2
                             size={16}
                             className="text-emerald-500"
@@ -469,6 +488,33 @@ export function IntegrationsList({
                       <Settings2 size={14} /> Configurar Webhook
                     </Button>
                   )
+                ) : app.id === "cartpanda" ? (
+                  // 🔥 LÓGICA DE DOIS BOTÕES DA CARTPANDA AQUI
+                  app.isConnected ? (
+                    <div className="flex items-center gap-2 w-full animate-in fade-in duration-300">
+                      <Button
+                        onClick={() => setIsCartpandaModalOpen(true)}
+                        className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white gap-2 h-10 text-xs shadow-sm"
+                      >
+                        <Settings2 size={14} /> Ver Webhook
+                      </Button>
+                      <Button
+                        onClick={handleDisconnectCartpanda}
+                        variant="outline"
+                        size="icon"
+                        className="h-10 w-10 border-red-500/20 text-red-500 hover:bg-red-500/10 shrink-0 transition-colors"
+                      >
+                        <Unplug size={14} />
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      onClick={() => setIsCartpandaModalOpen(true)}
+                      className="w-full h-10 gap-2 justify-center font-medium text-xs rounded-lg shadow-sm bg-foreground text-background hover:bg-foreground/90 transition-all"
+                    >
+                      <Settings2 size={14} /> Configurar Webhook
+                    </Button>
+                  )
                 ) : (
                   <Button
                     onClick={() =>
@@ -515,6 +561,14 @@ export function IntegrationsList({
         onOpenChange={setIsYampiModalOpen}
         userId={userId}
         existingUrl={yampiUrl}
+      />
+
+      {/* 🔥 INSERIMOS O SHEET DA CARTPANDA AQUI COM A URL */}
+      <CartpandaSheet
+        open={isCartpandaModalOpen}
+        onOpenChange={setIsCartpandaModalOpen}
+        userId={userId}
+        existingUrl={cartpandaUrl}
       />
     </>
   );
