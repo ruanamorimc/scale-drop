@@ -23,7 +23,7 @@ model User {
   role          String?
 
   // Status de acesso baseado em assinatura
-  plan          String    @default("FREE")
+  plan          String       @default("FREE")
   accessStatus  AccessStatus @default(PENDING)
 
   createdAt     DateTime     @default(now())
@@ -34,23 +34,28 @@ model User {
   accounts Account[]
 
   // Relacionamentos SaaS
-  subscription          Subscription?
-  Subscriptionhistory   SubscriptionHistory[]
-  wallet                Wallet?
-  transactions          Transaction[]
-  suppliers             Supplier[]
-  storeIntegrations     StoreIntegration[]
-  products              Product[]
-  orders                Order[]
-  fees                  Fee[]
-  taxes                 Tax[]
-  fixedExpenses         FixedExpense[]
+  subscription        Subscription?
+  Subscriptionhistory SubscriptionHistory[]
+  wallet              Wallet?
+  transactions        Transaction[]
+  suppliers           Supplier[]
+  storeIntegrations   StoreIntegration[]
+  products            Product[]
+  orders              Order[]
+  fees                Fee[]
+  taxes               Tax[]
+  fixedExpenses       FixedExpense[]
 
   // 🔥 NOVO CAMPO PARA O GRID:
   dashboardLayout Json?
 
   // 🔥 NOVO CAMPO PARA AS TABELAS DE UTMS:
-  preferences   Json?     @default("{}")
+  preferences     Json?     @default("{}")
+
+  // 🔥 NOVOS RELACIONAMENTOS PARA MARKETING (META ADS)
+  metaAccessToken String?       // Token OAuth gerado no login com Facebook
+  metaAccounts    MetaAccount[] // Contas de anúncio ativadas
+  metaPixels      MetaPixel[]   // Pixels configurados via CAPI
 
   @@unique([email])
   @@index([accessStatus])
@@ -116,9 +121,9 @@ model Verification {
 // ============================================
 
 model Subscription {
-  id          String @id @default(cuid())
-  userId      String @unique     // Garante 1 assinatura por usuário
-  user        User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id         String @id @default(cuid())
+  userId     String @unique      // Garante 1 assinatura por usuário
+  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Dados do checkout externo
   provider       SubscriptionProvider     // Kirvano, PerfectPay, Hubla, Ticto
@@ -186,7 +191,6 @@ model SubscriptionHistory {
   amount    Float?   // Quanto ele pagou
   currency  String?  @default("BRL")
   
-  
   createdAt DateTime @default(now()) // A data exata que o evento ocorreu
 
   @@index([userId])
@@ -198,9 +202,9 @@ model SubscriptionHistory {
 // ============================================
 
 model Wallet {
-  id     String @id @default(cuid())
-  userId String @unique
-  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  id      String @id @default(cuid())
+  userId  String @unique
+  user    User   @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   // Saldo atual (em centavos para precisão)
   balance Decimal @default(0) @db.Decimal(12, 2)
@@ -217,9 +221,9 @@ model Wallet {
 }
 
 model Transaction {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  id      String @id @default(cuid())
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   // Tipo e valor
   type         TransactionType
@@ -253,9 +257,9 @@ enum TransactionType {
 // ============================================
 
 model Supplier {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  id      String @id @default(cuid())
+  userId  String
+  user    User   @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   // Dados básicos
   name     String
@@ -287,56 +291,126 @@ model Supplier {
 }
 
 // ============================================
-// INTEGRAÇÕES COM LOJAS
+// INTEGRAÇÕES GERAIS (Lojas, Gateways, Marketing, etc)
 // ============================================
 
 model StoreIntegration {
-  id     String @id @default(cuid())
-  userId String
-  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  id             String @id @default(cuid())
+  userId         String
+  user           User   @relation(fields: [userId], references: [id], onDelete: Restrict)
 
-  // Tipo de loja
-  platform StorePlatform
+  // 🔥 MUDAMOS AQUI: Agora ele aceita qualquer provedor da nossa lista VIP
+  platform       IntegrationProvider
 
-  // Dados da loja
-  storeName String
-  storeId   String // ID da loja na plataforma
-  storeUrl  String?
+  // Dados da integração
+  storeName      String
+  storeId        String?  // Deixei opcional (?), pois Yampi usa Token, não ID de loja
+  storeUrl       String?
 
   // Credenciais (criptografadas)
-  accessToken    String // Token de acesso da API
+  accessToken    String   // Usaremos este campo para guardar a Chave Secreta da Yampi!
   refreshToken   String?
   tokenExpiresAt DateTime?
 
   // Status da integração
-  isActive    Boolean   @default(true)
-  isConnected Boolean   @default(false)
-  lastSyncAt  DateTime?
+  isActive       Boolean  @default(true)
+  isConnected    Boolean  @default(false)
+  lastSyncAt     DateTime?
 
   // Configurações
-  autoSync     Boolean @default(true)
-  syncInterval Int? // Intervalo em minutos
+  autoSync       Boolean  @default(true)
+  syncInterval   Int?     // Intervalo em minutos
 
   // Metadados
-  metadata Json?
+  metadata       Json?
 
   // Relacionamentos
-  orders Order[]
+  orders         Order[]
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
 
-  @@unique([userId, platform, storeId])
+  // Removi o storeId da chave única pois checkouts podem não ter "ID de Loja"
+  @@unique([userId, platform]) 
   @@index([userId])
   @@index([platform])
   @@index([isActive])
   @@map("store_integration")
 }
 
-enum StorePlatform {
+// 🔥 NOSSA NOVA LISTA VIP DEFINITIVA:
+enum IntegrationProvider {
+  // Lojas
   SHOPIFY
   MERCADO_LIVRE
-  SHOPEE
+  NUVEMSHOP
+
+  // Checkouts e Gateways
+  YAMPI
+  CARTPANDA
+  KIWIFY
+  HOTMART
+  KIRVANO
+  APPMAX
+  MERCADO_PAGO
+  STRIPE
+
+  // Marketing
+  FACEBOOK_ADS
+  GOOGLE_ADS
+  TIKTOK_ADS
+
+  // Logística
+  MELHOR_ENVIO
+}
+
+// ============================================
+// INTEGRAÇÕES DE MARKETING (META ADS)
+// ============================================
+
+model MetaAccount {
+  id        String  @id @default(cuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  accountId String  // ID da BM ou Conta (Ex: act_123456789)
+  name      String  // Nome da Conta (Ex: Loja Principal)
+  isActive  Boolean @default(true) // Se o switch estiver ligado no Sheet
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, accountId])
+  @@index([userId])
+  @@map("meta_account")
+}
+
+model MetaPixel {
+  id        String  @id @default(cuid())
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name      String  // Nome da configuração do Pixel (Ex: Pixel de Lançamento)
+  type      String  @default("meta") // Pode virar um Enum no futuro se adicionar TikTok
+  pixelIds  String[] // Array de IDs (Contingência)
+  status    String  @default("Ativo") // "Ativo" ou "Desativado"
+
+  // 🔥 Aqui é onde salvamos todas as regras dinâmicas que você preenche no formulário lateral
+  rules     Json    @default("{}")
+  // Exemplo de estrutura do JSON que salvaremos:
+  // {
+  //   "lead": { "enabled": true, "detectionRule": "Contém texto", "text": "Entrar no grupo" },
+  //   "addToCart": { "enabled": false },
+  //   "initiateCheckout": { "enabled": true, "detectionRule": "Contém CSS", "text": "btn-buy" },
+  //   "purchase": { "config": "Apenas vendas aprovadas", "value": "Valor da venda", "product": "Qualquer" },
+  //   "ip": "Enviar IPv6 se houver"
+  // }
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("meta_pixel")
 }
 
 // ============================================
@@ -351,9 +425,8 @@ model Product {
   supplier   Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
 
   // --- Identificação Externa (O SEGREDO DO MULTI-LOJAS) 🦎 ---
-  // Aqui a gente generaliza. Não usamos 'mlbId', usamos 'externalId'.
   externalId    String?  // ID na loja (ex: "MLB123", "7654321")
-  provider      String   @default("MANUAL") // "MERCADO_LIVRE", "SHOPIFY", "SHOPEE", "MANUAL"
+  provider      String   @default("MANUAL") // "MERCADO_LIVRE", "SHOPIFY", "NUVEMSHOP", "MANUAL"
   storeName     String?  // Nome da loja visual (ex: "Minha Loja ML Principal")
 
   // Link direto para o produto na plataforma original
@@ -408,8 +481,6 @@ model Product {
   @@map("product")
 
   // 🔥 A REGRA DE OURO:
-  // Impede duplicar o mesmo produto da mesma loja para o mesmo usuário.
-  // Mas permite que usuários diferentes vendam o mesmo produto.
   @@unique([externalId, provider, userId])
 }
 
