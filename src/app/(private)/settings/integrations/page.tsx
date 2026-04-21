@@ -40,7 +40,7 @@ export default async function IntegrationsPage() {
     ? `${appUrl}/api/webhooks/yampi?id=${yampiIntegration.id}`
     : null;
 
-    // 1. Busca a Cartpanda no banco
+  // 1. Busca a Cartpanda no banco
   const cartpandaIntegration = await prisma.storeIntegration.findFirst({
     where: { userId: session.user.id, platform: "CARTPANDA" },
   });
@@ -49,6 +49,14 @@ export default async function IntegrationsPage() {
   const cartpandaUrl = cartpandaIntegration
     ? `${appUrl}/api/webhooks/cartpanda?id=${cartpandaIntegration.id}`
     : null;
+
+  // Buscar a integração da Shopify no banco
+  const shopifyIntegration = await prisma.storeIntegration.findFirst({
+    where: { userId: session.user.id, platform: "SHOPIFY" },
+  });
+
+  const isShopifyConnected = !!shopifyIntegration;
+  const shopifyDomain = shopifyIntegration?.storeName || null;
 
   return (
     <div className="space-y-6">
@@ -71,6 +79,8 @@ export default async function IntegrationsPage() {
         yampiUrl={yampiUrl}
         isCartpandaConnected={isCartpandaConnected}
         cartpandaUrl={cartpandaUrl}
+        isShopifyConnected={isShopifyConnected}
+        shopifyDomain={shopifyDomain}
       />
     </div>
   );

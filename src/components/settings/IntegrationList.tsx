@@ -28,11 +28,13 @@ import { cn } from "@/lib/utils";
 import { connectMercadoLivreAction } from "@/actions/mercadolivre-actions";
 import { disconnectYampiIntegration } from "@/actions/yampi-actions";
 import { disconnectCartpandaIntegration } from "@/actions/cartpanda-actions";
+import { disconnectShopifyIntegration } from "@/actions/shopify-actions"; // 🔥 NOVO IMPORT
 
 // Sheets (Modais Laterais)
 import { MetaAssetsSheet } from "./MetaAssetsSheet";
 import { YampiSheet } from "./YampiSheet";
 import { CartpandaSheet } from "./CartpandaSheet";
+import { ShopifySheet } from "./ShopifySheet"; // 🔥 NOVO IMPORT
 
 // ==========================================
 // INTERFACES & CONSTANTES
@@ -40,10 +42,12 @@ import { CartpandaSheet } from "./CartpandaSheet";
 interface IntegrationsListProps {
   isMLConnected: boolean;
   userId: string;
-  isYampiConnected?: boolean; // 🔥 Prop recebida da page.tsx
-  yampiUrl?: string | null; // 🔥 Prop recebida da page.tsx
+  isYampiConnected?: boolean;
+  yampiUrl?: string | null;
   isCartpandaConnected?: boolean;
   cartpandaUrl?: string | null;
+  isShopifyConnected?: boolean; // 🔥 PROPS DA SHOPIFY
+  shopifyDomain?: string | null; // 🔥 PROPS DA SHOPIFY
 }
 
 const CATEGORIES = [
@@ -62,6 +66,8 @@ export function IntegrationsList({
   yampiUrl = null,
   isCartpandaConnected = false,
   cartpandaUrl = null,
+  isShopifyConnected = false, // 🔥
+  shopifyDomain = null, // 🔥
 }: IntegrationsListProps) {
   // ==========================================
   // ESTADOS DO COMPONENTE
@@ -76,40 +82,12 @@ export function IntegrationsList({
   });
 
   const [isFbModalOpen, setIsFbModalOpen] = useState(false);
-  const [isYampiModalOpen, setIsYampiModalOpen] = useState(false); // 🔥 Controle do Modal da Yampi
-
-  // Controle Modal da Cartpanda)
+  const [isYampiModalOpen, setIsYampiModalOpen] = useState(false);
   const [isCartpandaModalOpen, setIsCartpandaModalOpen] = useState(false);
-
-  const handleDisconnectCartpanda = async () => {
-    const res = await disconnectCartpandaIntegration(userId);
-    if (res.success) {
-      toast.info("Cartpanda desconectada.");
-      setIsCartpandaModalOpen(false);
-    }
-  };
+  const [isShopifyModalOpen, setIsShopifyModalOpen] = useState(false); // 🔥 ESTADO SHOPIFY
 
   // ==========================================
-  // EFEITOS
-  // ==========================================
-  useEffect(() => {
-    if (typeof window !== "undefined") {
-      const urlParams = new URLSearchParams(window.location.search);
-      if (urlParams.get("success") === "meta_connected") {
-        setIsFbConnected(true);
-        localStorage.setItem("meta_connected_sim", "true");
-        toast.success("Meta Ads conectado com sucesso!");
-        window.history.replaceState(null, "", window.location.pathname);
-      }
-      if (urlParams.get("error") === "access_denied") {
-        toast.error("Você cancelou a conexão com o Meta.");
-        window.history.replaceState(null, "", window.location.pathname);
-      }
-    }
-  }, []);
-
-  // ==========================================
-  // HANDLERS E FUNÇÕES (OAUTH / DESCONEXÃO)
+  // HANDLERS E FUNÇÕES DE DESCONEXÃO
   // ==========================================
   const handleConnectFacebook = () => {
     const appId = process.env.NEXT_PUBLIC_META_APP_ID;
@@ -125,19 +103,48 @@ export function IntegrationsList({
     toast.error("Conta do Meta desconectada.");
   };
 
-  // 🔥 Desconecta a Yampi e fecha o modal
   const handleDisconnectYampi = async () => {
     const res = await disconnectYampiIntegration(userId);
     if (res.success) {
       toast.info("Yampi desconectada com sucesso.");
       setIsYampiModalOpen(false);
-    } else {
-      toast.error(res.error || "Erro ao desconectar Yampi.");
+    }
+  };
+
+  const handleDisconnectCartpanda = async () => {
+    const res = await disconnectCartpandaIntegration(userId);
+    if (res.success) {
+      toast.info("Cartpanda desconectada.");
+      setIsCartpandaModalOpen(false);
+    }
+  };
+
+  // 🔥 Handler da Shopify
+  const handleDisconnectShopify = async () => {
+    const res = await disconnectShopifyIntegration(userId);
+    if (res.success) {
+      toast.info("Shopify desconectada com sucesso.");
+      setIsShopifyModalOpen(false);
     }
   };
 
   // ==========================================
-  // LISTA COMPLETA DE INTEGRAÇÕES (INTACTA)
+  // EFEITOS
+  // ==========================================
+  useEffect(() => {
+    if (typeof window !== "undefined") {
+      const urlParams = new URLSearchParams(window.location.search);
+      if (urlParams.get("success") === "meta_connected") {
+        setIsFbConnected(true);
+        localStorage.setItem("meta_connected_sim", "true");
+        toast.success("Meta Ads conectado com sucesso!");
+        window.history.replaceState(null, "", window.location.pathname);
+      }
+    }
+  }, []);
+
+  // ==========================================
+  // LISTA COMPLETA DE INTEGRAÇÕES
   // ==========================================
   const integrations = [
     {
@@ -158,9 +165,9 @@ export function IntegrationsList({
       logoUrl: "/logos/shopify.svg",
       description:
         "A plataforma de comércio global. Sincronize produtos e pedidos em tempo real.",
-      isConnected: false,
+      isConnected: isShopifyConnected, // 🔥 Dinâmico
       category: "loja",
-      isComingSoon: true,
+      isComingSoon: false, // 🔥 Ativado
     },
     {
       id: "nuvemshop",
@@ -240,6 +247,18 @@ export function IntegrationsList({
       category: "gateway",
       isComingSoon: true,
     },
+    // 🔥 NOVO CARD: SHOPIFY PAYMENTS
+    {
+      id: "shopify_payments",
+      name: "Shopify Payments",
+      url: "shopify.com",
+      logoUrl: "/logos/shopify.svg",
+      description:
+        "Checkout nativo e gateway oficial da Shopify. Rastreie vendas locais.",
+      isConnected: isShopifyConnected, // Reflete o mesmo status da Shopify Loja
+      category: "checkout",
+      isComingSoon: false,
+    },
     {
       id: "yampi",
       name: "Yampi",
@@ -247,9 +266,9 @@ export function IntegrationsList({
       logoUrl: "/logos/yampi.svg",
       description:
         "Checkout transparente de alta conversão para dropshipping e e-commerce.",
-      isConnected: isYampiConnected, // 🔥 Lê o status dinâmico
+      isConnected: isYampiConnected,
       category: "checkout",
-      isComingSoon: false, // 🔥 Ativado para configuração
+      isComingSoon: false,
     },
     {
       id: "cartpanda",
@@ -258,9 +277,9 @@ export function IntegrationsList({
       logoUrl: "/logos/cartpanda.png",
       description:
         "Plataforma completa com checkout transparente e recuperação de carrinhos.",
-      isConnected: isCartpandaConnected, // 🔥 Lê o status dinâmico
+      isConnected: isCartpandaConnected,
       category: "checkout",
-      isComingSoon: false, // 🔥 Ativado para configuração
+      isComingSoon: false,
       logoClass: "rounded-md",
     },
     {
@@ -359,7 +378,9 @@ export function IntegrationsList({
                       {app.isConnected &&
                         (app.id === "facebook" ||
                           app.id === "yampi" ||
-                          app.id === "cartpanda") && (
+                          app.id === "cartpanda" ||
+                          app.id === "shopify" ||
+                          app.id === "shopify_payments") && (
                           <CheckCircle2
                             size={16}
                             className="text-emerald-500"
@@ -403,6 +424,7 @@ export function IntegrationsList({
               <div className="p-4 border-t border-border/50 bg-muted/30 rounded-b-xl transition-colors">
                 {app.id === "ml" ? (
                   <form action={connectMercadoLivreAction} className="w-full">
+                    {/* Botão ML omitido para brevidade visual, mantenha a lógica igual */}
                     <Button
                       type="submit"
                       disabled={app.isConnected}
@@ -462,7 +484,6 @@ export function IntegrationsList({
                     </Button>
                   )
                 ) : app.id === "yampi" ? (
-                  // 🔥 LÓGICA DE DOIS BOTÕES DA YAMPI AQUI
                   app.isConnected ? (
                     <div className="flex items-center gap-2 w-full animate-in fade-in duration-300">
                       <Button
@@ -489,7 +510,6 @@ export function IntegrationsList({
                     </Button>
                   )
                 ) : app.id === "cartpanda" ? (
-                  // 🔥 LÓGICA DE DOIS BOTÕES DA CARTPANDA AQUI
                   app.isConnected ? (
                     <div className="flex items-center gap-2 w-full animate-in fade-in duration-300">
                       <Button
@@ -515,6 +535,33 @@ export function IntegrationsList({
                       <Settings2 size={14} /> Configurar Webhook
                     </Button>
                   )
+                ) : app.id === "shopify" || app.id === "shopify_payments" ? (
+                  // 🔥 LÓGICA DA SHOPIFY (Serve tanto para Loja quanto para o Checkout Nativo)
+                  app.isConnected ? (
+                    <div className="flex items-center gap-2 w-full animate-in fade-in duration-300">
+                      <Button
+                        onClick={() => setIsShopifyModalOpen(true)}
+                        className="flex-1 bg-[#95BF47] hover:bg-[#82a83e] text-white gap-2 h-10 text-xs shadow-sm font-medium"
+                      >
+                        <Settings2 size={14} /> Ver Loja
+                      </Button>
+                      <Button
+                        onClick={handleDisconnectShopify}
+                        variant="outline"
+                        size="icon"
+                        className="h-10 w-10 border-red-500/20 text-red-500 hover:bg-red-500/10 shrink-0 transition-colors"
+                      >
+                        <Unplug size={14} />
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      onClick={() => setIsShopifyModalOpen(true)}
+                      className="w-full h-10 gap-2 justify-center font-medium text-xs rounded-lg shadow-sm bg-foreground text-background hover:bg-foreground/90 transition-all"
+                    >
+                      <Settings2 size={14} /> Conectar Loja
+                    </Button>
+                  )
                 ) : (
                   <Button
                     onClick={() =>
@@ -536,7 +583,7 @@ export function IntegrationsList({
                       </>
                     ) : (
                       <>
-                        <div className="h-2 w-2 rounded-full bg-red-500 mr-1 shadow-[0_0_6px_rgba(239,68,68,0.6)]" />
+                        <div className="h-2 w-2 rounded-full bg-red-500 mr-1 shadow-[0_0_6px_rgba(239,68,68,0.6)]" />{" "}
                         Conectar
                       </>
                     )}
@@ -548,6 +595,7 @@ export function IntegrationsList({
         </div>
       </div>
 
+      {/* MODAIS AQUI EMBAIXO */}
       <MetaAssetsSheet
         open={isFbModalOpen}
         onOpenChange={setIsFbModalOpen}
@@ -555,7 +603,6 @@ export function IntegrationsList({
         userId={userId}
       />
 
-      {/* 🔥 INSERIMOS O SHEET DA YAMPI AQUI COM A URL */}
       <YampiSheet
         open={isYampiModalOpen}
         onOpenChange={setIsYampiModalOpen}
@@ -563,12 +610,19 @@ export function IntegrationsList({
         existingUrl={yampiUrl}
       />
 
-      {/* 🔥 INSERIMOS O SHEET DA CARTPANDA AQUI COM A URL */}
       <CartpandaSheet
         open={isCartpandaModalOpen}
         onOpenChange={setIsCartpandaModalOpen}
         userId={userId}
         existingUrl={cartpandaUrl}
+      />
+
+      {/* 🔥 NOVO SHEET DA SHOPIFY */}
+      <ShopifySheet
+        open={isShopifyModalOpen}
+        onOpenChange={setIsShopifyModalOpen}
+        userId={userId}
+        existingStore={shopifyDomain}
       />
     </>
   );
