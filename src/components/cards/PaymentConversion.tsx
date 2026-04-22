@@ -3,23 +3,52 @@
 import { CreditCard, Barcode, Banknote, PieChart } from "lucide-react";
 import { PremiumCard } from "@/components/cards/PremiumCard";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
-import { Button } from "@/components/ui/button";
+import { cn } from "@/lib/utils";
 
-// --- CARD INDIVIDUAL ---
+// ==========================================
+// TIPAGENS
+// ==========================================
+interface ConversionData {
+  conversion: number;
+  approvedValue: string;
+  approvedCount: number;
+  pendingValue: string;
+  pendingCount: number;
+  refusedValue: string;
+  refusedCount: number;
+}
+
+interface ConversionCardProps {
+  title: string;
+  icon: React.ReactNode;
+  color: string;
+  ringColor: string;
+  data: ConversionData;
+  isValuesVisible: boolean; // Recebe o status do Olho
+}
+
+// ==========================================
+// 1. CARD INDIVIDUAL (Cartão, Pix, Boleto)
+// ==========================================
 const ConversionCard = ({
   title,
   icon,
   color,
-  bgColor,
   ringColor,
   data,
-}: any) => {
+  isValuesVisible,
+}: ConversionCardProps) => {
   const radius = 30;
   const circumference = 2 * Math.PI * radius;
   // Fallback para evitar NaN
   const safeConversion = isNaN(data.conversion) ? 0 : data.conversion;
   const strokeDashoffset =
     circumference - (safeConversion / 100) * circumference;
+
+  // Classe padrão para aplicar o blur financeiro
+  const blurClass = !isValuesVisible
+    ? "blur-[5px] opacity-50 select-none transition-all duration-300"
+    : "transition-all duration-300";
 
   return (
     <PremiumCard className="hover:bg-muted/20 transition-all duration-300 group">
@@ -35,25 +64,22 @@ const ConversionCard = ({
             </div>
             <span className="text-sm font-medium text-foreground">{title}</span>
           </div>
-{/*           <Button
-            variant="ghost"
-            className="h-6 text-[10px] text-muted-foreground hover:text-foreground px-2"
-          >
-            Ver detalhes
-          </Button> */}
         </div>
+
         <div className="flex items-center justify-between gap-4">
+          {/* Gráfico Circular */}
           <div className="relative flex items-center justify-center shrink-0">
             <svg width="80" height="80" className="transform -rotate-90">
+              {/* Trilha do Fundo (Adaptada para Light/Dark Mode) */}
               <circle
                 cx="40"
                 cy="40"
                 r={radius}
-                stroke="currentColor"
                 strokeWidth="6"
                 fill="transparent"
-                className="text-muted/20"
+                className="stroke-zinc-200 dark:stroke-zinc-800"
               />
+              {/* Linha de Progresso */}
               <circle
                 cx="40"
                 cy="40"
@@ -71,11 +97,15 @@ const ConversionCard = ({
               <span className="text-[9px] text-muted-foreground font-medium">
                 Conversão
               </span>
-              <span className="text-sm font-bold text-foreground">
+              <span
+                className={cn("text-sm font-bold text-foreground", blurClass)}
+              >
                 {Math.round(safeConversion)}%
               </span>
             </div>
           </div>
+
+          {/* Dados e Valores */}
           <div className="flex-1 space-y-2">
             {/* APROVADO */}
             <div className="flex justify-between items-start text-xs">
@@ -84,32 +114,40 @@ const ConversionCard = ({
                 <span className="text-muted-foreground">Aprovado</span>
               </div>
               <div className="text-right">
-                <span className="block font-bold text-foreground">
+                <span
+                  className={cn("block font-bold text-foreground", blurClass)}
+                >
                   {data.approvedValue}
                 </span>
-                <span className="text-[9px] text-muted-foreground">
+                <span
+                  className={cn("text-[9px] text-muted-foreground", blurClass)}
+                >
                   ({data.approvedCount})
                 </span>
               </div>
             </div>
 
-            {/* PENDENTE (Agora conectado) */}
+            {/* PENDENTE */}
             <div className="flex justify-between items-start text-xs">
               <div className="flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-yellow-500" />
                 <span className="text-muted-foreground">Pendente</span>
               </div>
               <div className="text-right">
-                <span className="block font-bold text-foreground">
+                <span
+                  className={cn("block font-bold text-foreground", blurClass)}
+                >
                   {data.pendingValue}
                 </span>
-                <span className="text-[9px] text-muted-foreground">
+                <span
+                  className={cn("text-[9px] text-muted-foreground", blurClass)}
+                >
                   ({data.pendingCount})
                 </span>
               </div>
             </div>
 
-            {/* RECUSADO / VENCIDO (Agora conectado) */}
+            {/* RECUSADO / VENCIDO */}
             <div className="flex justify-between items-start text-xs">
               <div className="flex items-center gap-2">
                 <span className="w-1.5 h-1.5 rounded-full bg-red-500" />
@@ -118,10 +156,14 @@ const ConversionCard = ({
                 </span>
               </div>
               <div className="text-right">
-                <span className="block font-bold text-foreground">
+                <span
+                  className={cn("block font-bold text-foreground", blurClass)}
+                >
                   {data.refusedValue}
                 </span>
-                <span className="text-[9px] text-muted-foreground">
+                <span
+                  className={cn("text-[9px] text-muted-foreground", blurClass)}
+                >
                   ({data.refusedCount})
                 </span>
               </div>
@@ -133,8 +175,16 @@ const ConversionCard = ({
   );
 };
 
-const PaymentDistributionCard = ({ data }: any) => {
-  // Lendo os novos dados detalhados
+// ==========================================
+// 2. CARD DE DISTRIBUIÇÃO (Resumo Geral)
+// ==========================================
+const PaymentDistributionCard = ({
+  data,
+  isValuesVisible,
+}: {
+  data: any;
+  isValuesVisible: boolean;
+}) => {
   const m = data.metrics || { card: {}, pix: {}, boleto: {} };
 
   const cardCount = m.card.paidCount || 0;
@@ -156,6 +206,10 @@ const PaymentDistributionCard = ({ data }: any) => {
       ? Math.round((data.countPaid / data.countGenerated) * 100)
       : 0;
 
+  const blurClass = !isValuesVisible
+    ? "blur-[4px] opacity-50 select-none transition-all duration-300"
+    : "transition-all duration-300";
+
   return (
     <PremiumCard className="hover:bg-muted/20 transition-all duration-300 group">
       <div className="p-5">
@@ -170,13 +224,8 @@ const PaymentDistributionCard = ({ data }: any) => {
               Formas de Pagamento
             </span>
           </div>
-{/*           <Button
-            variant="ghost"
-            className="h-6 text-[10px] text-muted-foreground hover:text-foreground px-2"
-          >
-            Ver detalhes
-          </Button> */}
         </div>
+
         <div className="flex items-center justify-between gap-4">
           <div className="relative flex items-center justify-center shrink-0">
             <svg
@@ -185,13 +234,14 @@ const PaymentDistributionCard = ({ data }: any) => {
               viewBox="0 0 80 80"
               className="transform -rotate-90"
             >
+              {/* Trilha do Fundo (Adaptada) */}
               <circle
                 cx="40"
                 cy="40"
                 r={radius}
-                stroke="#27272a"
                 strokeWidth="6"
                 fill="transparent"
+                className="stroke-zinc-200 dark:stroke-zinc-800"
               />
               <circle
                 cx="40"
@@ -219,12 +269,16 @@ const PaymentDistributionCard = ({ data }: any) => {
               <span className="text-[9px] text-muted-foreground font-medium">
                 Conversão
               </span>
-              <span className="text-sm font-bold text-foreground">
+              <span
+                className={cn("text-sm font-bold text-foreground", blurClass)}
+              >
                 {generalConversion}%
               </span>
             </div>
           </div>
+
           <div className="flex-1 space-y-3">
+            {/* Linha Cartão */}
             <div className="flex justify-between items-start text-xs">
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-purple-600 shrink-0" />
@@ -233,28 +287,50 @@ const PaymentDistributionCard = ({ data }: any) => {
                 </span>
               </div>
               <div className="text-right flex flex-col items-end">
-                <span className="block font-bold text-foreground leading-none mb-0.5">
+                <span
+                  className={cn(
+                    "block font-bold text-foreground leading-none mb-0.5",
+                    blurClass,
+                  )}
+                >
                   {cardPercent}%
                 </span>
-                <span className="text-[9px] text-muted-foreground block leading-none">
+                <span
+                  className={cn(
+                    "text-[9px] text-muted-foreground block leading-none",
+                    blurClass,
+                  )}
+                >
                   ({cardCount}/{totalPaidCount})
                 </span>
               </div>
             </div>
+            {/* Linha Pix */}
             <div className="flex justify-between items-start text-xs">
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-500 shrink-0" />
                 <span className="text-muted-foreground leading-none">Pix</span>
               </div>
               <div className="text-right flex flex-col items-end">
-                <span className="block font-bold text-foreground leading-none mb-0.5">
+                <span
+                  className={cn(
+                    "block font-bold text-foreground leading-none mb-0.5",
+                    blurClass,
+                  )}
+                >
                   {pixPercent}%
                 </span>
-                <span className="text-[9px] text-muted-foreground block leading-none">
+                <span
+                  className={cn(
+                    "text-[9px] text-muted-foreground block leading-none",
+                    blurClass,
+                  )}
+                >
                   ({pixCount}/{totalPaidCount})
                 </span>
               </div>
             </div>
+            {/* Linha Boleto */}
             <div className="flex justify-between items-start text-xs">
               <div className="flex items-center gap-2 mt-0.5">
                 <span className="w-1.5 h-1.5 rounded-full bg-orange-500 shrink-0" />
@@ -263,10 +339,20 @@ const PaymentDistributionCard = ({ data }: any) => {
                 </span>
               </div>
               <div className="text-right flex flex-col items-end">
-                <span className="block font-bold text-foreground leading-none mb-0.5">
+                <span
+                  className={cn(
+                    "block font-bold text-foreground leading-none mb-0.5",
+                    blurClass,
+                  )}
+                >
                   {boletoPercent}%
                 </span>
-                <span className="text-[9px] text-muted-foreground block leading-none">
+                <span
+                  className={cn(
+                    "text-[9px] text-muted-foreground block leading-none",
+                    blurClass,
+                  )}
+                >
                   ({boletoCount}/{totalPaidCount})
                 </span>
               </div>
@@ -278,15 +364,16 @@ const PaymentDistributionCard = ({ data }: any) => {
   );
 };
 
-export function PaymentConversion({ data }: { data: any }) {
+// ==========================================
+// 3. EXPORTAÇÃO PRINCIPAL
+// ==========================================
+export function PaymentConversion({ data }: { data: Record<string, any> }) {
   const { isValuesVisible } = useDashboard();
-  const blur = (val: string) => isValuesVisible ? val : "••••••";
 
   const f = (val: number) =>
     val?.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) ||
     "R$ 0,00";
 
-  // Acessa o novo objeto 'metrics' que criamos no backend
   const m = data.metrics || {
     card: {
       paid: 0,
@@ -314,7 +401,6 @@ export function PaymentConversion({ data }: { data: any }) {
     },
   };
 
-  // Helper para calcular conversão por método
   const calcConv = (paid: number, pending: number, refused: number) => {
     const total = paid + pending + refused;
     return total > 0 ? (paid / total) * 100 : 0;
@@ -323,7 +409,7 @@ export function PaymentConversion({ data }: { data: any }) {
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
       {/* 1. Resumo Geral */}
-      <PaymentDistributionCard data={data} />
+      <PaymentDistributionCard data={data} isValuesVisible={isValuesVisible} />
 
       {/* 2. Cartão */}
       <ConversionCard
@@ -331,17 +417,18 @@ export function PaymentConversion({ data }: { data: any }) {
         icon={<CreditCard size={18} />}
         color="bg-blue-600"
         ringColor="#9333ea"
+        isValuesVisible={isValuesVisible}
         data={{
           conversion: calcConv(
             m.card.paidCount,
             m.card.pendingCount,
             m.card.refusedCount,
           ),
-          approvedValue: blur(f(m.card.paid)),
+          approvedValue: f(m.card.paid),
           approvedCount: m.card.paidCount,
-          pendingValue: blur(f(m.card.pending)),
+          pendingValue: f(m.card.pending),
           pendingCount: m.card.pendingCount,
-          refusedValue: blur(f(m.card.refused)),
+          refusedValue: f(m.card.refused),
           refusedCount: m.card.refusedCount,
         }}
       />
@@ -352,17 +439,18 @@ export function PaymentConversion({ data }: { data: any }) {
         icon={<Banknote size={18} />}
         color="bg-blue-600"
         ringColor="#10b981"
+        isValuesVisible={isValuesVisible}
         data={{
           conversion: calcConv(
             m.pix.paidCount,
             m.pix.pendingCount,
             m.pix.refusedCount,
           ),
-          approvedValue: blur(f(m.pix.paid)),
+          approvedValue: f(m.pix.paid),
           approvedCount: m.pix.paidCount,
-          pendingValue: blur(f(m.pix.pending)),
+          pendingValue: f(m.pix.pending),
           pendingCount: m.pix.pendingCount,
-          refusedValue: blur(f(m.pix.refused)),
+          refusedValue: f(m.pix.refused),
           refusedCount: m.pix.refusedCount,
         }}
       />
@@ -373,17 +461,18 @@ export function PaymentConversion({ data }: { data: any }) {
         icon={<Barcode size={18} />}
         color="bg-blue-600"
         ringColor="#3b82f6"
+        isValuesVisible={isValuesVisible}
         data={{
           conversion: calcConv(
             m.boleto.paidCount,
             m.boleto.pendingCount,
             m.boleto.refusedCount,
           ),
-          approvedValue: blur(f(m.boleto.paid)),
+          approvedValue: f(m.boleto.paid),
           approvedCount: m.boleto.paidCount,
-          pendingValue: blur(f(m.boleto.pending)),
+          pendingValue: f(m.boleto.pending),
           pendingCount: m.boleto.pendingCount,
-          refusedValue: blur(f(m.boleto.refused)),
+          refusedValue: f(m.boleto.refused),
           refusedCount: m.boleto.refusedCount,
         }}
       />

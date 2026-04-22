@@ -24,10 +24,14 @@ import {
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { toast } from "sonner";
 
-// --- ESTILO PREMIUM PADRÃO PARA INPUTS DO HEADER ---
-// H-9 (altura menor), fundo translúcido escuro, borda sutil, blur, texto mais leve.
+// --- ESTILO PREMIUM ADAPTADO PARA MODO CLARO E ESCURO ---
+// Mantém o blur e o aspecto premium, mas muda as cores do fundo e borda conforme o tema.
 const HEADER_INPUT_STYLE = cn(
-  "h-10 bg-zinc-950/40 hover:bg-zinc-900/60 border-white/10 text-muted-foreground hover:text-foreground text-sm transition-all backdrop-blur-md shadow-sm font-normal",
+  "h-10 text-sm transition-all backdrop-blur-md shadow-sm font-normal",
+  // Modo Claro (Light)
+  "bg-white/60 hover:bg-white/80 border-border/50 text-muted-foreground hover:text-foreground",
+  // Modo Escuro (Dark)
+  "dark:bg-zinc-950/40 dark:hover:bg-zinc-900/60 dark:border-white/10 dark:text-muted-foreground dark:hover:text-foreground",
 );
 
 // Mock de Produtos
@@ -40,7 +44,7 @@ const mockProducts = [
 ];
 
 interface DashboardHeaderProps {
-  data?: any;
+  data?: Record<string, any>;
 }
 
 export function DashboardHeader({ data }: DashboardHeaderProps) {
@@ -59,17 +63,18 @@ export function DashboardHeader({ data }: DashboardHeaderProps) {
     to: new Date(),
   });
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const [minutesAgo, setMinutesAgo] = useState(0);
+  const [currentTime, setCurrentTime] = useState(new Date());
+  const minutesAgo = differenceInMinutes(currentTime, lastUpdated);
   const [openProductFilter, setOpenProductFilter] = useState(false);
 
   // --- Lógica de Tempo Real ---
   useEffect(() => {
+    // Atualiza o relógio a cada 1 minuto (60000ms)
     const interval = setInterval(() => {
-      setMinutesAgo(differenceInMinutes(new Date(), lastUpdated));
+      setCurrentTime(new Date());
     }, 60000);
-    setMinutesAgo(differenceInMinutes(new Date(), lastUpdated)); // Atualiza imediatamente ao montar/refresh
     return () => clearInterval(interval);
-  }, [lastUpdated]);
+  }, []);
 
   const statusColor = minutesAgo > 5 ? "bg-orange-500" : "bg-emerald-500";
 
@@ -98,8 +103,6 @@ export function DashboardHeader({ data }: DashboardHeaderProps) {
   // --- Função Exportar CSV ---
   const handleExport = () => {
     if (!data) return toast.error("Sem dados para exportar.");
-    // ... (Lógica de exportação CSV mantida igual) ...
-    // (Vou omitir aqui para economizar espaço, mas mantenha o código anterior)
     toast.success("Relatório exportado!");
   };
 
@@ -140,7 +143,6 @@ export function DashboardHeader({ data }: DashboardHeaderProps) {
               variant="outline"
               size="icon"
               onClick={handleRefresh}
-              // APLICANDO O ESTILO PADRÃO
               className={cn(HEADER_INPUT_STYLE, "w-9 px-0")}
               disabled={isRefreshing}
             >
@@ -151,10 +153,10 @@ export function DashboardHeader({ data }: DashboardHeaderProps) {
             </Button>
           </div>
 
-          {/* Separador visual sutil */}
-          <div className="h-6 w-px bg-white/10 hidden md:block" />
+          {/* Separador visual sutil (Adaptado para Light/Dark) */}
+          <div className="h-6 w-px bg-border dark:bg-white/10 hidden md:block" />
 
-          {/* Seletor de Data (Passando a classe de estilo) */}
+          {/* Seletor de Data */}
           <div className="shrink-0">
             <DatePickerWithRange
               date={date}
@@ -170,7 +172,6 @@ export function DashboardHeader({ data }: DashboardHeaderProps) {
                 variant="outline"
                 role="combobox"
                 aria-expanded={openProductFilter}
-                // APLICANDO O ESTILO PADRÃO + Largura específica
                 className={cn(HEADER_INPUT_STYLE, "w-[180px] justify-between")}
               >
                 <span className="truncate">
@@ -182,8 +183,9 @@ export function DashboardHeader({ data }: DashboardHeaderProps) {
                 <Filter className="ml-2 h-3.5 w-3.5 shrink-0 opacity-50" />
               </Button>
             </PopoverTrigger>
-            {/* Conteúdo do Popover (Estilo Dark Clean) */}
-            <PopoverContent className="w-[200px] p-0 border-white/10 bg-zinc-950/95 backdrop-blur-xl text-foreground">
+
+            {/* Conteúdo do Popover (Adaptado para Light/Dark) */}
+            <PopoverContent className="w-[200px] p-0 border border-border/50 dark:border-white/10 bg-white/95 dark:bg-zinc-950/95 backdrop-blur-xl text-foreground shadow-lg">
               <Command className="bg-transparent">
                 <CommandInput
                   placeholder="Buscar..."
@@ -199,7 +201,8 @@ export function DashboardHeader({ data }: DashboardHeaderProps) {
                         setSelectedProduct(null);
                         setOpenProductFilter(false);
                       }}
-                      className="cursor-pointer text-muted-foreground hover:text-foreground hover:bg-white/5"
+                      // Adaptado o hover
+                      className="cursor-pointer text-muted-foreground hover:text-foreground hover:bg-black/5 dark:hover:bg-white/5"
                     >
                       Todos os produtos
                     </CommandItem>
@@ -211,7 +214,8 @@ export function DashboardHeader({ data }: DashboardHeaderProps) {
                           setSelectedProduct(product.value);
                           setOpenProductFilter(false);
                         }}
-                        className="cursor-pointer hover:bg-white/5 hover:text-foreground"
+                        // Adaptado o hover
+                        className="cursor-pointer hover:bg-black/5 dark:hover:bg-white/5 hover:text-foreground"
                       >
                         <span className="truncate">{product.label}</span>
                         <Check
@@ -233,7 +237,6 @@ export function DashboardHeader({ data }: DashboardHeaderProps) {
           {/* Botão Exportar */}
           <Button
             variant="outline"
-            // APLICANDO O ESTILO PADRÃO
             className={cn(HEADER_INPUT_STYLE, "gap-2")}
             onClick={handleExport}
           >

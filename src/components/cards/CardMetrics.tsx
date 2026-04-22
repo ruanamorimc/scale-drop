@@ -14,9 +14,28 @@ import { PremiumCard } from "@/components/cards/PremiumCard";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { cn } from "@/lib/utils";
 
-// --- ÍCONE (Sem alterações) ---
-const MetricIcon = ({ icon: Icon, colorClass, bgClass }: any) => (
-  <div className={`p-1 rounded-full ${bgClass} bg-opacity-20 shrink-0`}>
+// --- TIPAGENS ---
+interface MetricIconProps {
+  icon: any;
+  colorClass: string;
+  bgClass: string;
+}
+
+interface StandardMetricCardProps {
+  title: string;
+  value: string | number;
+  subValue?: string | number;
+  trend?: "up" | "down" | null;
+  trendValue?: string | null;
+  icon: any;
+  color: string;
+  bgColor: string;
+  isValuesVisible: boolean; // Controla o Blur
+}
+
+// --- ÍCONE ---
+const MetricIcon = ({ icon: Icon, colorClass, bgClass }: MetricIconProps) => (
+  <div className={`p-1 rounded-full ${bgClass} shrink-0`}>
     <div
       className={`p-1.5 rounded-full ${colorClass} text-white shadow-sm flex items-center justify-center`}
     >
@@ -25,7 +44,7 @@ const MetricIcon = ({ icon: Icon, colorClass, bgClass }: any) => (
   </div>
 );
 
-// --- CARD PADRÃO (Com lógica de Trend Condicional) ---
+// --- CARD PADRÃO (Com lógica de Trend Condicional e Efeito Blur) ---
 const StandardMetricCard = ({
   title,
   value,
@@ -35,16 +54,25 @@ const StandardMetricCard = ({
   icon,
   color,
   bgColor,
-}: any) => (
+  isValuesVisible, // Recebe do pai
+}: StandardMetricCardProps) => (
   <PremiumCard className="hover:bg-muted/20 transition-all duration-300 group">
     <div className="p-5 flex items-center gap-5 h-full">
       <MetricIcon icon={icon} colorClass={color} bgClass={bgColor} />
+
       <div className="flex flex-col w-full">
         <span className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-1">
           {title}
         </span>
+
         <div className="flex items-center gap-3">
-          <h4 className="text-xl font-bold text-foreground tracking-tight">
+          {/* 🔥 MÁGICA DO BLUR AQUI NO VALOR PRINCIPAL */}
+          <h4
+            className={cn(
+              "text-xl font-bold text-foreground tracking-tight transition-all duration-300",
+              !isValuesVisible && "blur-[5px] opacity-50 select-none", // Desfoque bancário
+            )}
+          >
             {value}
           </h4>
 
@@ -67,8 +95,15 @@ const StandardMetricCard = ({
             </div>
           )}
         </div>
+
+        {/* 🔥 MÁGICA DO BLUR AQUI NO SUB-VALOR */}
         {subValue && (
-          <p className="text-xs text-muted-foreground mt-0.5 font-medium">
+          <p
+            className={cn(
+              "text-xs text-muted-foreground mt-0.5 font-medium transition-all duration-300",
+              !isValuesVisible && "blur-[4px] opacity-40 select-none", // Desfoque levemente menor para subtexto
+            )}
+          >
             {subValue}
           </p>
         )}
@@ -77,14 +112,17 @@ const StandardMetricCard = ({
   </PremiumCard>
 );
 
-// --- COMPONENTE PRINCIPAL ---
-export function CardMetrics({ data }: { data: any }) {
+// ==========================================
+// COMPONENTE PRINCIPAL
+// ==========================================
+export function CardMetrics({ data }: { data: Record<string, any> }) {
   const d = data || {};
   const t = d.trends || {}; // Trends do Backend
-  const { isValuesVisible } = useDashboard();
-  const blur = (val: string) => (isValuesVisible ? val : "••••••");
 
-  // Helpers
+  // Contexto Global para o Blur
+  const { isValuesVisible } = useDashboard();
+
+  // Helpers de Formatação
   const formatCurrency = (val: number) =>
     val?.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) ||
     "R$ 0,00";
@@ -98,7 +136,7 @@ export function CardMetrics({ data }: { data: any }) {
       return { trend: null, trendValue: null };
     }
     return {
-      trend: val > 0 ? "up" : "down",
+      trend: val > 0 ? "up" : ("down" as "up" | "down"),
       trendValue: `${formatted}%`,
     };
   };
@@ -108,68 +146,73 @@ export function CardMetrics({ data }: { data: any }) {
       {/* 1. Pedidos Aprovados */}
       <StandardMetricCard
         title="Pedidos Aprovados"
-        value={blur(formatCurrency(d.totalPaid))}
-        subValue={blur(`(${d.countPaid || 0} pedidos)`)}
+        value={formatCurrency(d.totalPaid)}
+        subValue={`(${d.countPaid || 0} pedidos)`}
         {...getTrendProps(t.orders)}
         icon={ShoppingCart}
         color="bg-blue-600"
-        bgColor="bg-gray-100 dark:bg-gray-800/50"
+        bgColor="bg-blue-600/10"
+        isValuesVisible={isValuesVisible} // Passando estado pro Blur
       />
 
       {/* 2. Pedidos Pendentes */}
-      {/* Para pendentes, usamos a lógica de "Aguardando" apenas se > 0 */}
       <StandardMetricCard
         title="Pedidos Pendentes"
-        value={blur(formatCurrency(d.totalPending))}
-        subValue={blur(`(${d.countPending || 0} pedidos)`)}
+        value={formatCurrency(d.totalPending)}
+        subValue={`(${d.countPending || 0} pedidos)`}
         trend={d.totalPending > 0 ? "down" : undefined}
         trendValue={d.totalPending > 0 ? "Aguardando" : null}
         icon={Clock}
         color="bg-blue-600"
-        bgColor="bg-gray-100 dark:bg-gray-800/50"
+        bgColor="bg-blue-600/10"
+        isValuesVisible={isValuesVisible} // Passando estado pro Blur
       />
 
       {/* 3. Ticket Médio */}
       <StandardMetricCard
         title="Ticket Médio"
-        value={blur(formatCurrency(d.ticketAverage))}
+        value={formatCurrency(d.ticketAverage)}
         subValue="Média por venda"
         {...getTrendProps(t.ticket)}
         icon={Ticket}
         color="bg-blue-600"
-        bgColor="bg-gray-100 dark:bg-gray-800/50"
+        bgColor="bg-blue-600/10"
+        isValuesVisible={isValuesVisible} // Passando estado pro Blur
       />
 
       {/* 4. Margem de Lucro */}
       <StandardMetricCard
         title="Margem de Lucro"
-        value={blur(formatPercent(d.margin))}
-        {...getTrendProps(t.margin)} // Agora usa o trend real em vez de "Saudável"
+        value={formatPercent(d.margin)}
+        {...getTrendProps(t.margin)}
         icon={Percent}
         color="bg-blue-600"
-        bgColor="bg-gray-100 dark:bg-gray-800/50"
+        bgColor="bg-blue-600/10"
+        isValuesVisible={isValuesVisible} // Passando estado pro Blur
       />
 
       {/* 5. CAC */}
       <StandardMetricCard
         title="CAC"
-        value={blur(
-          d.countPaid > 0 ? formatCurrency(d.adSpend / d.countPaid) : "R$ 0,00",
-        )}
-        {...getTrendProps(t.cac)} // Trend real do CAC
+        value={
+          d.countPaid > 0 ? formatCurrency(d.adSpend / d.countPaid) : "R$ 0,00"
+        }
+        {...getTrendProps(t.cac)}
         icon={Users}
         color="bg-blue-600"
-        bgColor="bg-gray-100 dark:bg-gray-800/50"
+        bgColor="bg-blue-600/10"
+        isValuesVisible={isValuesVisible} // Passando estado pro Blur
       />
 
       {/* 6. ROI */}
       <StandardMetricCard
         title="ROI"
-        value={blur(formatPercent(d.roi))}
-        {...getTrendProps(t.roi)} // Agora usa o trend real em vez de "Retorno"
+        value={formatPercent(d.roi)}
+        {...getTrendProps(t.roi)}
         icon={Activity}
         color="bg-blue-600"
-        bgColor="bg-gray-100 dark:bg-gray-800/50"
+        bgColor="bg-blue-600/10"
+        isValuesVisible={isValuesVisible} // Passando estado pro Blur
       />
     </div>
   );
