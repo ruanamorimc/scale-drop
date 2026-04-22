@@ -60,7 +60,7 @@ const items = [
   },
   {
     title: "Rastreio",
-    url: "#",
+    url: "/tracking",
     icon: Truck,
   },
   {

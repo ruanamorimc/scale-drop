@@ -580,6 +580,9 @@ model Order {
   shippedAt      DateTime?
   deliveredAt    DateTime?
 
+  // Histórico de Rastreio (Timeline)
+  trackingEvents TrackingEvent[]
+
   // Itens do pedido
   items OrderItem[]
 
@@ -645,6 +648,24 @@ model OrderItem {
   @@index([orderId])
   @@index([productId])
   @@map("order_item")
+}
+
+// ==========================================
+// EVENTOS DE RASTREIO (TIMELINE)
+// ==========================================
+model TrackingEvent {
+  id          String   @id @default(cuid())
+  orderId     String
+  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  
+  status      String   // Ex: "Em Trânsito", "Na Fronteira"
+  description String   // Ex: "Objeto recebido pelos Correios do Brasil"
+  date        DateTime // Data que o evento ocorreu lá na transportadora
+  
+  createdAt   DateTime @default(now())
+
+  @@index([orderId])
+  @@map("tracking_events")
 }
 
 // ============================================
