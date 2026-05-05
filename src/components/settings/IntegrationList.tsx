@@ -28,13 +28,15 @@ import { cn } from "@/lib/utils";
 import { connectMercadoLivreAction } from "@/actions/mercadolivre-actions";
 import { disconnectYampiIntegration } from "@/actions/yampi-actions";
 import { disconnectCartpandaIntegration } from "@/actions/cartpanda-actions";
-import { disconnectShopifyIntegration } from "@/actions/shopify-actions"; // 🔥 NOVO IMPORT
+import { disconnectShopifyIntegration } from "@/actions/shopify-actions";
+import { disconnectAppmaxIntegration } from "@/actions/appmax-actions"; // 🔥 IMPORT DA AÇÃO DE DESCONECTAR
 
 // Sheets (Modais Laterais)
 import { MetaAssetsSheet } from "./MetaAssetsSheet";
 import { YampiSheet } from "./YampiSheet";
 import { CartpandaSheet } from "./CartpandaSheet";
-import { ShopifySheet } from "./ShopifySheet"; // 🔥 NOVO IMPORT
+import { ShopifySheet } from "./ShopifySheet";
+import { AppmaxSheet } from "@/components/settings/AppmaxSheet";
 
 // ==========================================
 // INTERFACES & CONSTANTES
@@ -46,8 +48,10 @@ interface IntegrationsListProps {
   yampiUrl?: string | null;
   isCartpandaConnected?: boolean;
   cartpandaUrl?: string | null;
-  isShopifyConnected?: boolean; // 🔥 PROPS DA SHOPIFY
-  shopifyDomain?: string | null; // 🔥 PROPS DA SHOPIFY
+  isShopifyConnected?: boolean;
+  shopifyDomain?: string | null;
+  isAppmaxConnected?: boolean;
+  appmaxUrl?: string | null; // 🔥 AQUI ESTAVA FALTANDO! Avisamos que vamos receber a URL
 }
 
 const CATEGORIES = [
@@ -66,8 +70,10 @@ export function IntegrationsList({
   yampiUrl = null,
   isCartpandaConnected = false,
   cartpandaUrl = null,
-  isShopifyConnected = false, // 🔥
-  shopifyDomain = null, // 🔥
+  isShopifyConnected = false,
+  shopifyDomain = null,
+  isAppmaxConnected = false,
+  appmaxUrl = null, // 🔥 AQUI ESTAVA FALTANDO! Recebendo a variável
 }: IntegrationsListProps) {
   // ==========================================
   // ESTADOS DO COMPONENTE
@@ -84,7 +90,8 @@ export function IntegrationsList({
   const [isFbModalOpen, setIsFbModalOpen] = useState(false);
   const [isYampiModalOpen, setIsYampiModalOpen] = useState(false);
   const [isCartpandaModalOpen, setIsCartpandaModalOpen] = useState(false);
-  const [isShopifyModalOpen, setIsShopifyModalOpen] = useState(false); // 🔥 ESTADO SHOPIFY
+  const [isShopifyModalOpen, setIsShopifyModalOpen] = useState(false);
+  const [isAppmaxModalOpen, setIsAppmaxModalOpen] = useState(false);
 
   // ==========================================
   // HANDLERS E FUNÇÕES DE DESCONEXÃO
@@ -119,12 +126,21 @@ export function IntegrationsList({
     }
   };
 
-  // 🔥 Handler da Shopify
   const handleDisconnectShopify = async () => {
     const res = await disconnectShopifyIntegration(userId);
     if (res.success) {
       toast.info("Shopify desconectada com sucesso.");
       setIsShopifyModalOpen(false);
+    }
+  };
+
+  const handleDisconnectAppmax = async () => {
+    const res = await disconnectAppmaxIntegration(userId);
+    if (res.success) {
+      toast.info("Appmax desconectada com sucesso.");
+      setIsAppmaxModalOpen(false);
+    } else {
+      toast.error("Erro ao desconectar Appmax.");
     }
   };
 
@@ -165,9 +181,9 @@ export function IntegrationsList({
       logoUrl: "/logos/shopify.svg",
       description:
         "A plataforma de comércio global. Sincronize produtos e pedidos em tempo real.",
-      isConnected: isShopifyConnected, // 🔥 Dinâmico
+      isConnected: isShopifyConnected,
       category: "loja",
-      isComingSoon: false, // 🔥 Ativado
+      isComingSoon: false,
     },
     {
       id: "nuvemshop",
@@ -221,9 +237,9 @@ export function IntegrationsList({
       logoUrl: "/logos/appmax.png",
       description:
         "Processador de pagamentos focado em maximizar a aprovação de vendas.",
-      isConnected: false,
+      isConnected: isAppmaxConnected,
       category: "gateway",
-      isComingSoon: true,
+      isComingSoon: false,
     },
     {
       id: "mercadopago",
@@ -247,7 +263,6 @@ export function IntegrationsList({
       category: "gateway",
       isComingSoon: true,
     },
-    // 🔥 NOVO CARD: SHOPIFY PAYMENTS
     {
       id: "shopify_payments",
       name: "Shopify Payments",
@@ -255,7 +270,7 @@ export function IntegrationsList({
       logoUrl: "/logos/shopify.svg",
       description:
         "Checkout nativo e gateway oficial da Shopify. Rastreie vendas locais.",
-      isConnected: isShopifyConnected, // Reflete o mesmo status da Shopify Loja
+      isConnected: isShopifyConnected,
       category: "checkout",
       isComingSoon: false,
     },
@@ -380,6 +395,7 @@ export function IntegrationsList({
                           app.id === "yampi" ||
                           app.id === "cartpanda" ||
                           app.id === "shopify" ||
+                          app.id === "appmax" || 
                           app.id === "shopify_payments") && (
                           <CheckCircle2
                             size={16}
@@ -424,7 +440,6 @@ export function IntegrationsList({
               <div className="p-4 border-t border-border/50 bg-muted/30 rounded-b-xl transition-colors">
                 {app.id === "ml" ? (
                   <form action={connectMercadoLivreAction} className="w-full">
-                    {/* Botão ML omitido para brevidade visual, mantenha a lógica igual */}
                     <Button
                       type="submit"
                       disabled={app.isConnected}
@@ -535,8 +550,33 @@ export function IntegrationsList({
                       <Settings2 size={14} /> Configurar Webhook
                     </Button>
                   )
+                ) : app.id === "appmax" ? (
+                  app.isConnected ? (
+                    <div className="flex items-center gap-2 w-full animate-in fade-in duration-300">
+                      <Button
+                        onClick={() => setIsAppmaxModalOpen(true)}
+                        className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white gap-2 h-10 text-xs shadow-sm"
+                      >
+                        <Settings2 size={14} /> Ver Webhook
+                      </Button>
+                      <Button
+                        onClick={handleDisconnectAppmax}
+                        variant="outline"
+                        size="icon"
+                        className="h-10 w-10 border-red-500/20 text-red-500 hover:bg-red-500/10 shrink-0 transition-colors"
+                      >
+                        <Unplug size={14} />
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      onClick={() => setIsAppmaxModalOpen(true)}
+                      className="w-full h-10 gap-2 justify-center font-medium text-xs rounded-lg shadow-sm bg-foreground text-background hover:bg-foreground/90 transition-all"
+                    >
+                      <Settings2 size={14} /> Configurar Webhook
+                    </Button>
+                  )
                 ) : app.id === "shopify" || app.id === "shopify_payments" ? (
-                  // 🔥 LÓGICA DA SHOPIFY (Serve tanto para Loja quanto para o Checkout Nativo)
                   app.isConnected ? (
                     <div className="flex items-center gap-2 w-full animate-in fade-in duration-300">
                       <Button
@@ -617,12 +657,17 @@ export function IntegrationsList({
         existingUrl={cartpandaUrl}
       />
 
-      {/* 🔥 NOVO SHEET DA SHOPIFY */}
       <ShopifySheet
         open={isShopifyModalOpen}
         onOpenChange={setIsShopifyModalOpen}
         userId={userId}
         existingStore={shopifyDomain}
+      />
+
+      <AppmaxSheet
+        open={isAppmaxModalOpen}
+        onOpenChange={setIsAppmaxModalOpen}
+        existingUrl={appmaxUrl}
       />
     </>
   );

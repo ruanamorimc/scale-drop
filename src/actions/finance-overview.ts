@@ -22,9 +22,11 @@ export async function getFinanceMetrics(from?: Date, to?: Date) {
   const userId = session.user.id;
 
   // 1.2 - Cálculo de Períodos (Para comparar o "Hoje" com o "Ontem" ou "Mês Passado")
-  const startDate = from || subDays(new Date(), 30); // Padrão: últimos 30 dias
+  const startDate = from || new Date // Padrão para hoje
   const endDate = to || new Date();
-  const daysDiff = differenceInDays(endDate, startDate) || 1;
+
+  // Diferença entre dias (Se for o mesmo dia será 0)
+  const daysDiff = differenceInDays(endDate, startDate);
 
   // Calcula o período exatamente igual, mas no passado, para a % de crescimento
   const prevEndDate = subDays(startDate, 1);
@@ -185,7 +187,8 @@ async function fetchPeriodData(userId: string, start: Date, end: Date) {
     ].includes(status);
     const isPending = ["PENDING", "PREPARING", "WAITING"].includes(status);
     const isRefused = [
-      "CANCELED",
+      "CANCELLED",
+      "RETURNED",
       "REFUSED",
       "DECLINED",
       "FAILED",

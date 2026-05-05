@@ -8,6 +8,7 @@ export default async function IntegrationsPage() {
   const session = await auth.api.getSession({
     headers: await headers(),
   });
+
   if (!session || !session.user) {
     return <div>Usuário não autenticado.</div>; // Ou redirecione para o login
   }
@@ -28,19 +29,18 @@ export default async function IntegrationsPage() {
     isMLConnected = !!integration;
   }
 
-  // 1. Busca a Yampi no banco
+  // 3. Busca a Yampi no banco
   const yampiIntegration = await prisma.storeIntegration.findFirst({
     where: { userId: session.user.id, platform: "YAMPI" },
   });
 
-  // 2. Define as variáveis
   const isYampiConnected = !!yampiIntegration;
   const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
   const yampiUrl = yampiIntegration
     ? `${appUrl}/api/webhooks/yampi?id=${yampiIntegration.id}`
     : null;
 
-  // 1. Busca a Cartpanda no banco
+  // 4. Busca a Cartpanda no banco
   const cartpandaIntegration = await prisma.storeIntegration.findFirst({
     where: { userId: session.user.id, platform: "CARTPANDA" },
   });
@@ -50,13 +50,23 @@ export default async function IntegrationsPage() {
     ? `${appUrl}/api/webhooks/cartpanda?id=${cartpandaIntegration.id}`
     : null;
 
-  // Buscar a integração da Shopify no banco
+  // 5. Buscar a integração da Shopify no banco
   const shopifyIntegration = await prisma.storeIntegration.findFirst({
     where: { userId: session.user.id, platform: "SHOPIFY" },
   });
 
   const isShopifyConnected = !!shopifyIntegration;
   const shopifyDomain = shopifyIntegration?.storeName || null;
+
+  // 🔥 6. Buscar a integração da Appmax no banco
+  const appmaxIntegration = await prisma.storeIntegration.findFirst({
+    where: { userId: session.user.id, platform: "APPMAX" },
+  });
+
+  const isAppmaxConnected = !!appmaxIntegration;
+  const appmaxUrl = appmaxIntegration
+    ? `${appUrl}/api/webhooks/appmax?id=${appmaxIntegration.id}`
+    : null;
 
   return (
     <div className="space-y-6">
@@ -67,11 +77,7 @@ export default async function IntegrationsPage() {
         </p>
       </div>
 
-      {/* 3. Passa o status verdadeiro para o componente */}
-
-      {/*       <form action={testImportProductsAction}>
-        <Button type="submit">TESTAR IMPORTAÇÃO (Olhar Terminal)</Button>
-      </form> */}
+      {/* 7. Passa o status verdadeiro para o componente */}
       <IntegrationsList
         isMLConnected={isMLConnected}
         userId={session.user.id}
@@ -81,6 +87,8 @@ export default async function IntegrationsPage() {
         cartpandaUrl={cartpandaUrl}
         isShopifyConnected={isShopifyConnected}
         shopifyDomain={shopifyDomain}
+        isAppmaxConnected={isAppmaxConnected}
+        appmaxUrl={appmaxUrl}
       />
     </div>
   );

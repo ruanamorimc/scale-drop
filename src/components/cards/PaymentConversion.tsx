@@ -243,6 +243,7 @@ const PaymentDistributionCard = ({
                 fill="transparent"
                 className="stroke-zinc-200 dark:stroke-zinc-800"
               />
+              {/* 1. Círculo do Pix (Verde) */}
               <circle
                 cx="40"
                 cy="40"
@@ -253,6 +254,7 @@ const PaymentDistributionCard = ({
                 strokeDasharray={`${(pixPercent / 100) * circumference} ${circumference}`}
                 className="transition-all duration-1000"
               />
+              {/* 1. Círculo do Cartão (Roxo) */}
               <circle
                 cx="40"
                 cy="40"
@@ -262,6 +264,18 @@ const PaymentDistributionCard = ({
                 fill="transparent"
                 strokeDasharray={`${(cardPercent / 100) * circumference} ${circumference}`}
                 strokeDashoffset={-1 * (pixPercent / 100) * circumference}
+                className="transition-all duration-1000"
+              />
+              {/* 1. Círculo do Boleto (Laranja) */}
+              <circle
+                cx="40"
+                cy="40"
+                r={radius}
+                stroke="#f97316"
+                strokeWidth="6"
+                fill="transparent"
+                strokeDasharray={`${(boletoPercent / 100) * circumference} ${circumference}`}
+                strokeDashoffset={-1 * (pixPercent / 100) * circumference - (cardPercent / 100) * circumference}
                 className="transition-all duration-1000"
               />
             </svg>
