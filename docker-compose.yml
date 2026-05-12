@@ -1,0 +1,18 @@
+version: "3.8"
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: scaledrop-postgres
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: Ruan3101
+      POSTGRES_DB: scaledrop
+    ports:
+      - "5433:5432"
+    volumes:
+      - scaledrop_pgdata:/var/lib/postgresql/data
+
+volumes:
+  scaledrop_pgdata:
