@@ -8,23 +8,43 @@ import { RecentOrdersTable } from "@/components/cards/RecentOrdersTable";
 import { TopProducts } from "@/components/cards/TopProducts";
 import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { getFinanceMetrics } from "@/actions/finance-overview";
-// IMPORTANTE: Importar o Provider
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
 
-export default async function DashboardPage() {
+// 🔥 1. Alteramos a tipagem para ser uma Promise (Exigência do Next.js 15)
+export default async function DashboardPage({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | undefined }>;
+}) {
   const session = await getServerSession();
   const user = session?.user;
 
   if (!user) unauthorized();
 
-  const financeData = await getFinanceMetrics();
+  // 🔥 2. O GRANDE TRUQUE: Precisamos de aguardar (await) os parâmetros da URL
+  const params = await searchParams;
+
+  let from: Date | undefined = undefined;
+  let to: Date | undefined = undefined;
+
+  // 3. Agora extraímos o "from" e o "to" da variável "params" já resolvida
+  if (typeof params.from === "string") {
+    // Forçamos o início do dia no fuso horário local (-03:00)
+    from = new Date(`${params.from}T00:00:00-03:00`);
+  }
+
+  if (typeof params.to === "string") {
+    // Forçamos o final do dia no fuso horário local (-03:00)
+    to = new Date(`${params.to}T23:59:59-03:00`);
+  }
+
+  // Passamos as datas corretas para a Action
+  const financeData = await getFinanceMetrics(from, to);
   const safeData = financeData || {};
 
   return (
-    // 1. Envolver tudo no Provider
     <DashboardProvider>
       <main className="px-6 py-6 space-y-6">
-        {/* 2. Passar 'data' para o Header (para Exportar CSV) */}
         <DashboardHeader data={safeData} />
 
         <SummaryCards data={safeData} />
@@ -51,3 +71,4 @@ export default async function DashboardPage() {
     </DashboardProvider>
   );
 }
+  
