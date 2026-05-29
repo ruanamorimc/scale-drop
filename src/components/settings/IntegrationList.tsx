@@ -29,14 +29,16 @@ import { connectMercadoLivreAction } from "@/actions/mercadolivre-actions";
 import { disconnectYampiIntegration } from "@/actions/yampi-actions";
 import { disconnectCartpandaIntegration } from "@/actions/cartpanda-actions";
 import { disconnectShopifyIntegration } from "@/actions/shopify-actions";
-import { disconnectAppmaxIntegration } from "@/actions/appmax-actions"; // 🔥 IMPORT DA AÇÃO DE DESCONECTAR
+import { disconnectAppmaxIntegration } from "@/actions/appmax-actions";
+import { disconnectPagarmeIntegration } from "@/actions/pagarme-actions"; // 🔥 IMPORT DA DESCONEXÃO PAGAR.ME
 
-// Sheets (Modais Laterais)
+// Sheets & Modais (Modais Laterais)
 import { MetaAssetsSheet } from "./MetaAssetsSheet";
 import { YampiSheet } from "./YampiSheet";
 import { CartpandaSheet } from "./CartpandaSheet";
 import { ShopifySheet } from "./ShopifySheet";
 import { AppmaxSheet } from "@/components/settings/AppmaxSheet";
+import { PagarmeSheet } from "@/components/settings/PagarmeSheet"; // 🔥 IMPORT DO NOSSO MODAL
 
 // ==========================================
 // INTERFACES & CONSTANTES
@@ -51,7 +53,9 @@ interface IntegrationsListProps {
   isShopifyConnected?: boolean;
   shopifyDomain?: string | null;
   isAppmaxConnected?: boolean;
-  appmaxUrl?: string | null; // 🔥 AQUI ESTAVA FALTANDO! Avisamos que vamos receber a URL
+  appmaxUrl?: string | null;
+  isPagarmeConnected?: boolean;
+  pagarmeUrl?: string | null;
 }
 
 const CATEGORIES = [
@@ -73,7 +77,9 @@ export function IntegrationsList({
   isShopifyConnected = false,
   shopifyDomain = null,
   isAppmaxConnected = false,
-  appmaxUrl = null, // 🔥 AQUI ESTAVA FALTANDO! Recebendo a variável
+  appmaxUrl = null,
+  isPagarmeConnected = false,
+  pagarmeUrl = null,
 }: IntegrationsListProps) {
   // ==========================================
   // ESTADOS DO COMPONENTE
@@ -92,6 +98,7 @@ export function IntegrationsList({
   const [isCartpandaModalOpen, setIsCartpandaModalOpen] = useState(false);
   const [isShopifyModalOpen, setIsShopifyModalOpen] = useState(false);
   const [isAppmaxModalOpen, setIsAppmaxModalOpen] = useState(false);
+  const [isPagarmeModalOpen, setIsPagarmeModalOpen] = useState(false); // 🔥 ESTADO DA PAGAR.ME
 
   // ==========================================
   // HANDLERS E FUNÇÕES DE DESCONEXÃO
@@ -141,6 +148,17 @@ export function IntegrationsList({
       setIsAppmaxModalOpen(false);
     } else {
       toast.error("Erro ao desconectar Appmax.");
+    }
+  };
+
+  // 🔥 HANDLER DA PAGAR.ME
+  const handleDisconnectPagarme = async () => {
+    const res = await disconnectPagarmeIntegration();
+    if (res.success) {
+      toast.info("Pagar.me desconectada com sucesso.");
+      setIsPagarmeModalOpen(false);
+    } else {
+      toast.error("Erro ao desconectar Pagar.me.");
     }
   };
 
@@ -240,6 +258,18 @@ export function IntegrationsList({
       isConnected: isAppmaxConnected,
       category: "gateway",
       isComingSoon: false,
+    },
+    {
+      id: "pagarme",
+      name: "Pagar.me",
+      url: "pagarme.com.br",
+      logoUrl: "/logos/pagar-me.png",
+      description:
+        "Processe pagamentos com cartão, boleto e Pix com alta conversão.",
+      isConnected: isPagarmeConnected, // 🔥 CORRIGIDO! Antes estava isAppmaxConnected
+      category: "gateway",
+      isComingSoon: false,
+      logoClass: "rounded-md",
     },
     {
       id: "mercadopago",
@@ -395,7 +425,8 @@ export function IntegrationsList({
                           app.id === "yampi" ||
                           app.id === "cartpanda" ||
                           app.id === "shopify" ||
-                          app.id === "appmax" || 
+                          app.id === "appmax" ||
+                          app.id === "pagarme" || // 🔥 ADICIONADO AQUI
                           app.id === "shopify_payments") && (
                           <CheckCircle2
                             size={16}
@@ -576,6 +607,33 @@ export function IntegrationsList({
                       <Settings2 size={14} /> Configurar Webhook
                     </Button>
                   )
+                ) : app.id === "pagarme" ? (
+                  // 🔥 RENDERIZAÇÃO NOVA DO BOTÃO DA PAGAR.ME
+                  app.isConnected ? (
+                    <div className="flex items-center gap-2 w-full animate-in fade-in duration-300">
+                      <Button
+                        onClick={() => setIsPagarmeModalOpen(true)}
+                        className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white gap-2 h-10 text-xs shadow-sm"
+                      >
+                        <Settings2 size={14} /> Atualizar Chaves
+                      </Button>
+                      <Button
+                        onClick={handleDisconnectPagarme}
+                        variant="outline"
+                        size="icon"
+                        className="h-10 w-10 border-red-500/20 text-red-500 hover:bg-red-500/10 shrink-0 transition-colors"
+                      >
+                        <Unplug size={14} />
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      onClick={() => setIsPagarmeModalOpen(true)}
+                      className="w-full h-10 gap-2 justify-center font-medium text-xs rounded-lg shadow-sm bg-foreground text-background hover:bg-foreground/90 transition-all"
+                    >
+                      <Settings2 size={14} /> Conectar Pagar.me
+                    </Button>
+                  )
                 ) : app.id === "shopify" || app.id === "shopify_payments" ? (
                   app.isConnected ? (
                     <div className="flex items-center gap-2 w-full animate-in fade-in duration-300">
@@ -668,6 +726,12 @@ export function IntegrationsList({
         open={isAppmaxModalOpen}
         onOpenChange={setIsAppmaxModalOpen}
         existingUrl={appmaxUrl}
+      />
+
+      <PagarmeSheet
+        open={isPagarmeModalOpen}
+        onOpenChange={setIsPagarmeModalOpen}
+        existingUrl={pagarmeUrl}
       />
     </>
   );

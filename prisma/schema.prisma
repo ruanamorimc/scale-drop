@@ -308,7 +308,8 @@ model StoreIntegration {
   storeUrl       String?
 
   // Credenciais (criptografadas)
-  accessToken    String   // Usaremos este campo para guardar a Chave Secreta da Yampi!
+  accessToken    String   // Usaremos este campo para guardar a Chave Secreta
+  publicKey      String?
   refreshToken   String?
   tokenExpiresAt DateTime?
 
@@ -354,6 +355,7 @@ enum IntegrationProvider {
   APPMAX
   MERCADO_PAGO
   STRIPE
+  PAGARME
 
   // Marketing
   FACEBOOK_ADS

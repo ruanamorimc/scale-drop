@@ -68,6 +68,16 @@ export default async function IntegrationsPage() {
     ? `${appUrl}/api/webhooks/appmax?id=${appmaxIntegration.id}`
     : null;
 
+  // 🔥 Buscar a integração da Pagar.me no banco
+  const pagarmeIntegration = await prisma.storeIntegration.findFirst({
+    where: { userId: session.user.id, platform: "PAGARME" },
+  });
+
+  const isPagarmeConnected = !!pagarmeIntegration;
+  const pagarmeUrl = pagarmeIntegration
+    ? `${appUrl}/api/webhooks/pagarme?id=${pagarmeIntegration.id}`
+    : null;
+
   return (
     <div className="space-y-6">
       <div>
@@ -89,6 +99,8 @@ export default async function IntegrationsPage() {
         shopifyDomain={shopifyDomain}
         isAppmaxConnected={isAppmaxConnected}
         appmaxUrl={appmaxUrl}
+        isPagarmeConnected={isPagarmeConnected}
+        pagarmeUrl={pagarmeUrl}
       />
     </div>
   );
