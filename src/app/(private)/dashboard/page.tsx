@@ -44,7 +44,7 @@ export default async function DashboardPage({
 
   return (
     <DashboardProvider>
-      <main className="px-6 py-6 space-y-6">
+      <main className="px-6 py-6 space-y-6 w-full min-w-0 overflow-x-hidden">
         <DashboardHeader data={safeData} />
 
         <SummaryCards data={safeData} />
@@ -64,11 +64,10 @@ export default async function DashboardPage({
           </div>
         </div>
 
-        <div className="w-full">
+        <div className="w-full overflow-hidden">
           <RecentOrdersTable />
         </div>
       </main>
     </DashboardProvider>
   );
 }
-  

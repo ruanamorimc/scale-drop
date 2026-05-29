@@ -1,5 +1,5 @@
 import { SidebarProvider } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/sidebar/Index";
+import { AppSidebar } from "@/components/sidebar";
 import { getServerSession } from "@/lib/get-session";
 import { unauthorized } from "next/navigation";
 import { ThemeProvider } from "@/components/providers/ThemeProviders";
@@ -25,8 +25,8 @@ export default async function PrivateLayout({
     >
       <SidebarProvider>
         <AppSidebar variant="floating" collapsible="icon" />
-        <main className="w-full">
-          <div className="px-4">{children}</div>
+        <main className="flex flex-col flex-1 h-screen min-w-0">
+          <div className="px-4 px-4 flex-1 min-w-0 overflow-y-auto">{children}</div>
 
           {/* 🔥 O NOVO TOASTER CYBERPUNK/NEON! */}
           {/* 🔥 O NOVO TOASTER CYBERPUNK/NEON (COM UNSTYLED TRUE) */}
