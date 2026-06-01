@@ -2,6 +2,13 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
+// 🔥 FUNÇÃO AUXILIAR DE PADRONIZAÇÃO
+function formatOrderNumber(number: string | number | null) {
+  if (!number) return "#0000";
+  const strNumber = String(number).trim();
+  return strNumber.startsWith("#") ? strNumber : `#${strNumber}`;
+}
+
 export async function POST(req: Request) {
   try {
     // 1. Pegamos o ID da integração na URL
@@ -83,6 +90,10 @@ export async function POST(req: Request) {
         `[DB] 💾 Salvando pedido -> Pagamento: ${paymentStatus} | Pedido: ${orderStatus}`,
       );
 
+      // 🔥 PADRONIZAÇÃO DO NÚMERO DO PEDIDO
+      const rawOrderNumber = data.code || data.id;
+      const orderNumberFormatted = formatOrderNumber(rawOrderNumber);
+
       // 5. O UPSERT Perfeito (Baseado 100% no seu schema)
       await prisma.order.upsert({
         where: {
@@ -96,10 +107,10 @@ export async function POST(req: Request) {
           paymentStatus: paymentStatus,
         },
         create: {
-          userId: integration.userId, // Pegamos lá em cima!
+          userId: integration.userId,
           storeIntegrationId: integrationId,
           externalOrderId: data.id,
-          orderNumber: data.code || null, // Se a pagar.me mandar o código do pedido
+          orderNumber: orderNumberFormatted, // 🔥 Agora salva com a hashtag garantida!
 
           // Valores (Seu schema exige subtotal e total)
           total: amountInReais,

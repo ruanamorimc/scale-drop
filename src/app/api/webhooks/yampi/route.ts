@@ -2,6 +2,23 @@ import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import crypto from "crypto";
 
+// 🔥 FUNÇÕES AUXILIARES DE PADRONIZAÇÃO
+function formatOrderNumber(number: string | number) {
+  if (!number) return "#0000";
+  const strNumber = String(number).trim();
+  return strNumber.startsWith('#') ? strNumber : `#${strNumber}`;
+}
+
+function mapYampiPaymentStatus(status: string) {
+  switch (status) {
+    case 'paid': return 'PAID';
+    case 'canceled':
+    case 'refused': return 'FAILED';
+    case 'refunded': return 'REFUNDED';
+    default: return 'PENDING';
+  }
+}
+
 // ==========================================
 // FUNÇÃO EXIGIDA PELA META (Criptografia SHA-256 para Email/Telefone)
 // ==========================================
@@ -62,6 +79,56 @@ export async function POST(req: Request) {
     const statusAlias = orderData.status?.alias || "";
     const orderValue = parseFloat(orderData.value_total || 0);
     const customer = orderData.customer || {};
+
+    const rawOrderNumber = orderData.number || orderData.id;
+    const orderNumber = formatOrderNumber(rawOrderNumber);
+    
+    try {
+      await prisma.order.upsert({
+        where: {
+          storeIntegrationId_externalOrderId: {
+            storeIntegrationId: integration.id,
+            externalOrderId: String(orderData.id)
+          }
+        },
+        update: {
+          paymentStatus: mapYampiPaymentStatus(statusAlias),
+          total: orderValue,
+          updatedAt: new Date(),
+        },
+        create: {
+          userId: integration.userId,
+          storeIntegrationId: integration.id,
+          externalOrderId: String(orderData.id),
+          orderNumber: orderNumber, // Salvando com a # obrigatória
+          
+          status: 'PENDING', // Logística inicial (quem resolve isso depois é a Nuvemshop/Shopify)
+          paymentStatus: mapYampiPaymentStatus(statusAlias),
+          
+          customerName: customer.name || 'Cliente Yampi',
+          customerEmail: customer.email || null,
+          customerPhone: customer.phone?.full_number || null,
+          customerDocument: customer.cpf || customer.cnpj || null,
+          
+          // Yampi geralmente envia o endereço dentro de shipping_address ou address
+          shippingAddress: orderData.shipping_address?.street || 'Não informado',
+          shippingCity: orderData.shipping_address?.city || null,
+          shippingState: orderData.shipping_address?.state || null,
+          shippingZipCode: orderData.shipping_address?.zipcode || null,
+          
+          subtotal: parseFloat(orderData.value_products) || orderValue,
+          shippingCost: parseFloat(orderData.value_shipping) || 0,
+          discount: parseFloat(orderData.value_discount) || 0,
+          total: orderValue,
+          
+          createdAt: new Date(orderData.created_at || Date.now()),
+        }
+      });
+      console.log(`[Scale Drop] Pedido Yampi ${orderNumber} salvo no banco.`);
+    } catch (dbError) {
+      console.error("[Scale Drop] Erro ao salvar pedido Yampi no banco:", dbError);
+      // Não damos return erro aqui para não travar o envio do Pixel CAPI abaixo
+    }
 
     // 5. Busca o Pixel Ativo do Dono dessa Integração
     const metaPixel = await prisma.metaPixel.findFirst({

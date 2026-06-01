@@ -1,6 +1,25 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
+// 🔥 FUNÇÃO AUXILIAR E TIPAGEM
+function formatOrderNumber(number: string | number | null) {
+  if (!number) return "#0000";
+  const strNumber = String(number).trim();
+  // Se já for #APP-123 ou #123, mantém. Se for 123, vira #123.
+  return strNumber.startsWith("#") ? strNumber : `#${strNumber}`;
+}
+
+type OrderStatus =
+  | "PENDING"
+  | "PROCESSING"
+  | "CONFIRMED"
+  | "PREPARING"
+  | "SHIPPED"
+  | "DELIVERED"
+  | "CANCELLED"
+  | "RETURNED";
+type PaymentStatus = "PENDING" | "PAID" | "PARTIAL" | "REFUNDED" | "FAILED";
+
 export async function POST(req: Request) {
   try {
     const body = await req.json();
@@ -28,15 +47,14 @@ export async function POST(req: Request) {
     const externalOrderId = body.pedido_id?.toString() || body.id?.toString();
     const statusRaw = body.status?.toLowerCase();
 
+    // // 1. MAPEAMENTO DE STATUS DUPLO (Encomenda e Pagamento)
     // ==========================================
-    // 1. MAPEAMENTO DE STATUS DUPLO (Encomenda e Pagamento)
-    // ==========================================
-    let orderStatus = "PENDING";
-    let paymentState = "PENDING";
+    let orderStatus: OrderStatus = "PENDING";
+    let paymentState: PaymentStatus = "PENDING";
 
     if (["pago", "aprovado", "sucesso"].includes(statusRaw)) {
-      orderStatus = "CONFIRMED"; // Encomenda confirmada
-      paymentState = "PAID"; // Dinheiro no bolso
+      orderStatus = "CONFIRMED";
+      paymentState = "PAID";
     } else if (["recusado", "cancelado", "vencido"].includes(statusRaw)) {
       orderStatus = "CANCELLED";
       paymentState = "FAILED";
@@ -46,14 +64,18 @@ export async function POST(req: Request) {
     }
 
     // ==========================================
-    // 2. IDENTIFICAÇÃO DO MÉTODO
+    // // 2. IDENTIFICAÇÃO DO MÉTODO E FORMATAÇÃO DO PEDIDO
     // ==========================================
     let method = "credit_card";
     if (body.forma_pagamento?.includes("pix")) method = "pix";
     if (body.forma_pagamento?.includes("boleto")) method = "boleto";
 
+    // 🔥 PADRONIZAÇÃO DA HASHTAG
+    const rawOrderNumber = body.pedido_id || externalOrderId;
+    const orderNumberFormatted = formatOrderNumber(rawOrderNumber);
+
     // ==========================================
-    // 3. UPSERT BLINDADO COM TODOS OS CAMPOS
+    // // 3. UPSERT BLINDADO COM TODOS OS CAMPOS
     // ==========================================
     await prisma.order.upsert({
       where: {
@@ -63,21 +85,18 @@ export async function POST(req: Request) {
         },
       },
       update: {
-        // @ts-ignore
         status: orderStatus,
-        // @ts-ignore
-        paymentStatus: paymentState, // 🔥 Adicionado o status de pagamento correto
+        paymentStatus: paymentState,
         paymentMethod: method,
       },
       create: {
         userId: integration.userId,
         storeIntegrationId: integration.id,
         externalOrderId: externalOrderId,
-        orderNumber: body.pedido_id?.toString() || "#APP-" + externalOrderId,
-        // @ts-ignore
+        orderNumber: orderNumberFormatted, // 🔥 Salva com a hashtag garantida!
+
         status: orderStatus,
-        // @ts-ignore
-        paymentStatus: paymentState, // 🔥 Adicionado o status de pagamento correto
+        paymentStatus: paymentState,
         paymentMethod: method,
         customerName: body.cliente_nome || "Cliente Appmax",
         customerEmail: body.cliente_email || "",

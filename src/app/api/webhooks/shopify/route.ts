@@ -1,6 +1,24 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 
+// 🔥 FUNÇÃO AUXILIAR DE PADRONIZAÇÃO E TIPAGEM
+function formatOrderNumber(number: string | number | null) {
+  if (!number) return "#0000";
+  const strNumber = String(number).trim();
+  return strNumber.startsWith("#") ? strNumber : `#${strNumber}`;
+}
+
+type OrderStatus =
+  | "PENDING"
+  | "PROCESSING"
+  | "CONFIRMED"
+  | "PREPARING"
+  | "SHIPPED"
+  | "DELIVERED"
+  | "CANCELLED"
+  | "RETURNED";
+type PaymentStatus = "PENDING" | "PAID" | "PARTIAL" | "REFUNDED" | "FAILED";
+
 export async function POST(req: Request) {
   try {
     const { searchParams } = new URL(req.url);
@@ -29,14 +47,17 @@ export async function POST(req: Request) {
     // ==========================================
     // 1. MAPEAMENTO DE STATUS (Shopify -> Scale Drop)
     // ==========================================
-    let orderStatus = "PENDING";
+    let orderStatus: OrderStatus = "PENDING";
+    let paymentStatus: PaymentStatus = "PENDING";
 
     if (body.cancelled_at) {
       orderStatus = "CANCELLED";
+      paymentStatus = "FAILED";
     } else if (body.fulfillment_status === "fulfilled") {
-      orderStatus = "SHIPPED"; // O Fornecedor despachou!
+      orderStatus = "SHIPPED";
     } else if (body.financial_status === "paid") {
-      orderStatus = "PREPARING"; // Foi pago, aguardando o fornecedor enviar
+      orderStatus = "PREPARING";
+      paymentStatus = "PAID";
     }
 
     // ==========================================
@@ -60,46 +81,89 @@ export async function POST(req: Request) {
     // ==========================================
     // 3. SALVANDO NO BANCO DE DADOS (UPSERT)
     // ==========================================
-    // O "upsert" é inteligente: se o pedido já existe (orders/updated), ele só atualiza.
-    // Se não existe (orders/create), ele cria um novo.
-    const order = await prisma.order.upsert({
+    // 🔥 3. LÓGICA DE DEDUPLICAÇÃO INTELIGENTE
+    const rawOrderNumber = body.order_number || body.name || externalOrderId;
+    const orderNumber = formatOrderNumber(rawOrderNumber);
+
+    // Procura se o pedido já existe (talvez criado por Yampi/Appmax)
+    const existingOrder = await prisma.order.findFirst({
       where: {
-        storeIntegrationId_externalOrderId: {
+        userId: integration.userId,
+        orderNumber: orderNumber,
+      },
+      include: { storeIntegration: true },
+    });
+
+    let order;
+
+    if (existingOrder) {
+      // Pedido já existe. Quem é o dono?
+      const isGatewayOrder =
+        existingOrder.storeIntegration.platform !== "SHOPIFY";
+
+      if (isGatewayOrder) {
+        // Se um Gateway criou, a Shopify APENAS atualiza a logística/rastreio
+        order = await prisma.order.update({
+          where: { id: existingOrder.id },
+          data: {
+            status: orderStatus, // Sem any!
+            trackingNumber: trackingNumber || existingOrder.trackingNumber,
+            updatedAt: new Date(),
+          },
+        });
+        console.log(
+          `[Scale Drop] Pedido Shopify ${orderNumber} deduplicado. Logística atualizada.`,
+        );
+      } else {
+        // Se já era da Shopify mesmo, atualiza tudo
+        order = await prisma.order.update({
+          where: { id: existingOrder.id },
+          data: {
+            status: orderStatus, // Sem any!
+            paymentStatus: paymentStatus, // Sem any!
+            trackingNumber: trackingNumber || existingOrder.trackingNumber,
+            total: parseFloat(body.total_price) || existingOrder.total,
+            updatedAt: new Date(),
+          },
+        });
+        console.log(`[Scale Drop] Pedido Shopify ${orderNumber} atualizado.`);
+      }
+    } else {
+      // Não existe no banco, cria do zero (Venda nativa via Shopify Payments)
+      order = await prisma.order.create({
+        data: {
+          userId: integration.userId,
           storeIntegrationId: integration.id,
           externalOrderId: externalOrderId,
+          orderNumber: orderNumber,
+
+          status: orderStatus, // Sem any!
+          paymentStatus: paymentStatus, // Sem any!
+
+          customerName: customerName,
+          customerEmail: customerEmail,
+          customerPhone: customerPhone,
+          customerDocument: "00000000000", // Fallback
+
+          shippingAddress: body.shipping_address?.address1 || "Não informado",
+          shippingCity: body.shipping_address?.city || null,
+          shippingState: body.shipping_address?.province || "",
+          shippingZipCode: body.shipping_address?.zip || null,
+          shippingCountry: body.shipping_address?.country_code || "BR",
+
+          subtotal: parseFloat(body.subtotal_price) || 0,
+          shippingCost: parseFloat(
+            body.total_shipping_price_set?.shop_money?.amount || 0,
+          ),
+          discount: parseFloat(body.total_discounts) || 0,
+          total: parseFloat(body.total_price) || 0,
+
+          trackingNumber: trackingNumber,
+          createdAt: new Date(body.created_at || Date.now()),
         },
-      },
-      update: {
-        status: orderStatus as any, // "as any" caso o TS reclame do seu Enum
-        trackingNumber: trackingNumber,
-        customerEmail: customerEmail,
-        customerPhone: customerPhone,
-      },
-      create: {
-        userId: integration.userId,
-        storeIntegrationId: integration.id,
-        externalOrderId: externalOrderId,
-        orderNumber:
-          body.order_number?.toString() || body.name || `#${externalOrderId}`,
-        status: orderStatus as any,
-        customerName: customerName,
-        customerEmail: customerEmail,
-        customerPhone: customerPhone,
-        customerDocument: "00000000000", // CPF provisório (Shopify pura não envia CPF fácil)
-        shippingAddress: body.shipping_address?.address1 || "Não informado",
-        shippingCity: body.shipping_address?.city || "",
-        shippingState: body.shipping_address?.province || "",
-        shippingZipCode: body.shipping_address?.zip || "",
-        shippingCountry: body.shipping_address?.country_code || "BR",
-        subtotal: parseFloat(body.subtotal_price || 0),
-        shippingCost: parseFloat(
-          body.total_shipping_price_set?.shop_money?.amount || 0,
-        ),
-        discount: parseFloat(body.total_discounts || 0),
-        total: parseFloat(body.total_price || 0),
-        trackingNumber: trackingNumber,
-      },
-    });
+      });
+      console.log(`[Scale Drop] Novo pedido Shopify ${orderNumber} criado.`);
+    }
 
     // ==========================================
     // 4. CRIANDO EVENTO NA TIMELINE
