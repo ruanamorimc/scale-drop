@@ -78,6 +78,13 @@ export default async function IntegrationsPage() {
     ? `${appUrl}/api/webhooks/pagarme?id=${pagarmeIntegration.id}`
     : null;
 
+  const nuvemshopIntegration = await prisma.storeIntegration.findFirst({
+    where: { userId: session.user.id, platform: "NUVEMSHOP" },
+  });
+
+  const isNuvemshopConnected = !!nuvemshopIntegration;
+  const nuvemshopStoreName = nuvemshopIntegration?.storeName || null;
+
   return (
     <div className="space-y-6">
       <div>
@@ -101,6 +108,8 @@ export default async function IntegrationsPage() {
         appmaxUrl={appmaxUrl}
         isPagarmeConnected={isPagarmeConnected}
         pagarmeUrl={pagarmeUrl}
+        isNuvemshopConnected={isNuvemshopConnected}
+        nuvemshopStoreName={nuvemshopStoreName}
       />
     </div>
   );

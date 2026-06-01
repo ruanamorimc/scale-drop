@@ -14,7 +14,6 @@ import {
   Wallet,
   ShoppingCart,
   Clock,
-  Facebook,
   Settings2,
   Unplug,
   CheckCircle2,
@@ -30,7 +29,8 @@ import { disconnectYampiIntegration } from "@/actions/yampi-actions";
 import { disconnectCartpandaIntegration } from "@/actions/cartpanda-actions";
 import { disconnectShopifyIntegration } from "@/actions/shopify-actions";
 import { disconnectAppmaxIntegration } from "@/actions/appmax-actions";
-import { disconnectPagarmeIntegration } from "@/actions/pagarme-actions"; // 🔥 IMPORT DA DESCONEXÃO PAGAR.ME
+import { disconnectPagarmeIntegration } from "@/actions/pagarme-actions";
+import { disconnectNuvemshopIntegration } from "@/actions/nuvemshop-actions";
 
 // Sheets & Modais (Modais Laterais)
 import { MetaAssetsSheet } from "./MetaAssetsSheet";
@@ -38,7 +38,8 @@ import { YampiSheet } from "./YampiSheet";
 import { CartpandaSheet } from "./CartpandaSheet";
 import { ShopifySheet } from "./ShopifySheet";
 import { AppmaxSheet } from "@/components/settings/AppmaxSheet";
-import { PagarmeSheet } from "@/components/settings/PagarmeSheet"; // 🔥 IMPORT DO NOSSO MODAL
+import { PagarmeSheet } from "@/components/settings/PagarmeSheet";
+import { NuvemshopSheet } from "@/components/settings/NuvemshopSheet";
 
 // ==========================================
 // INTERFACES & CONSTANTES
@@ -56,6 +57,8 @@ interface IntegrationsListProps {
   appmaxUrl?: string | null;
   isPagarmeConnected?: boolean;
   pagarmeUrl?: string | null;
+  isNuvemshopConnected?: boolean;
+  nuvemshopStoreName?: string | null;
 }
 
 const CATEGORIES = [
@@ -80,6 +83,8 @@ export function IntegrationsList({
   appmaxUrl = null,
   isPagarmeConnected = false,
   pagarmeUrl = null,
+  isNuvemshopConnected = false,
+  nuvemshopStoreName = null,
 }: IntegrationsListProps) {
   // ==========================================
   // ESTADOS DO COMPONENTE
@@ -98,7 +103,8 @@ export function IntegrationsList({
   const [isCartpandaModalOpen, setIsCartpandaModalOpen] = useState(false);
   const [isShopifyModalOpen, setIsShopifyModalOpen] = useState(false);
   const [isAppmaxModalOpen, setIsAppmaxModalOpen] = useState(false);
-  const [isPagarmeModalOpen, setIsPagarmeModalOpen] = useState(false); // 🔥 ESTADO DA PAGAR.ME
+  const [isPagarmeModalOpen, setIsPagarmeModalOpen] = useState(false);
+  const [isNuvemshopModalOpen, setIsNuvemshopModalOpen] = useState(false);
 
   // ==========================================
   // HANDLERS E FUNÇÕES DE DESCONEXÃO
@@ -151,7 +157,6 @@ export function IntegrationsList({
     }
   };
 
-  // 🔥 HANDLER DA PAGAR.ME
   const handleDisconnectPagarme = async () => {
     const res = await disconnectPagarmeIntegration();
     if (res.success) {
@@ -159,6 +164,16 @@ export function IntegrationsList({
       setIsPagarmeModalOpen(false);
     } else {
       toast.error("Erro ao desconectar Pagar.me.");
+    }
+  };
+
+  const handleDisconnectNuvemshop = async () => {
+    const res = await disconnectNuvemshopIntegration(userId);
+    if (res?.success) {
+      toast.info("Nuvemshop desconectada com sucesso.");
+      setIsNuvemshopModalOpen(false);
+    } else {
+      toast.error(res?.error || "Erro ao desconectar Nuvemshop.");
     }
   };
 
@@ -210,9 +225,9 @@ export function IntegrationsList({
       logoUrl: "/logos/nuvemshop.jpg",
       description:
         "Plataforma de e-commerce líder na América Latina. Gestão completa da sua loja.",
-      isConnected: false,
+      isConnected: isNuvemshopConnected,
       category: "loja",
-      isComingSoon: true,
+      isComingSoon: false,
       logoClass: "rounded-md",
     },
     {
@@ -426,7 +441,9 @@ export function IntegrationsList({
                           app.id === "cartpanda" ||
                           app.id === "shopify" ||
                           app.id === "appmax" ||
-                          app.id === "pagarme" || // 🔥 ADICIONADO AQUI
+                          app.id === "pagarme" ||
+                          app.id === "nuvemshop" ||
+                          app.id === "ml" ||
                           app.id === "shopify_payments") && (
                           <CheckCircle2
                             size={16}
@@ -463,7 +480,7 @@ export function IntegrationsList({
                   </div>
                 </div>
                 <div className="p-0">
-                  <p className="text-sm text-muted-foreground leading-relaxed h-[60px] overflow-hidden text-ellipsis line-clamp-3">
+                  <p className="text-sm text-muted-foreground leading-relaxed h-[65px] overflow-hidden text-ellipsis line-clamp-3">
                     {app.description}
                   </p>
                 </div>
@@ -519,14 +536,9 @@ export function IntegrationsList({
                   ) : (
                     <Button
                       onClick={handleConnectFacebook}
-                      className="w-full h-10 gap-2 justify-center font-medium text-xs rounded-lg shadow-sm bg-[#1877F2] hover:bg-[#1877F2]/90 text-white transition-all"
+                      className="w-full h-10 gap-2 justify-center font-medium text-xs rounded-lg shadow-sm bg-foreground text-background hover:bg-foreground/90 transition-all"
                     >
-                      <Facebook
-                        size={14}
-                        fill="currentColor"
-                        className="stroke-none"
-                      />{" "}
-                      Conectar Meta Ads
+                      <Settings2 size={14} /> Configurar Webhook
                     </Button>
                   )
                 ) : app.id === "yampi" ? (
@@ -608,14 +620,13 @@ export function IntegrationsList({
                     </Button>
                   )
                 ) : app.id === "pagarme" ? (
-                  // 🔥 RENDERIZAÇÃO NOVA DO BOTÃO DA PAGAR.ME
                   app.isConnected ? (
                     <div className="flex items-center gap-2 w-full animate-in fade-in duration-300">
                       <Button
                         onClick={() => setIsPagarmeModalOpen(true)}
                         className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white gap-2 h-10 text-xs shadow-sm"
                       >
-                        <Settings2 size={14} /> Atualizar Chaves
+                        <Settings2 size={14} /> Ver Webhook
                       </Button>
                       <Button
                         onClick={handleDisconnectPagarme}
@@ -641,7 +652,7 @@ export function IntegrationsList({
                         onClick={() => setIsShopifyModalOpen(true)}
                         className="flex-1 bg-[#95BF47] hover:bg-[#82a83e] text-white gap-2 h-10 text-xs shadow-sm font-medium"
                       >
-                        <Settings2 size={14} /> Ver Loja
+                        <Settings2 size={14} /> Ver Webhook
                       </Button>
                       <Button
                         onClick={handleDisconnectShopify}
@@ -657,7 +668,34 @@ export function IntegrationsList({
                       onClick={() => setIsShopifyModalOpen(true)}
                       className="w-full h-10 gap-2 justify-center font-medium text-xs rounded-lg shadow-sm bg-foreground text-background hover:bg-foreground/90 transition-all"
                     >
-                      <Settings2 size={14} /> Conectar Loja
+                      <Settings2 size={14} /> Configurar Webhook
+                    </Button>
+                  )
+                ) : app.id === "nuvemshop" ? (
+                  // 🔥 RENDERIZAÇÃO NOVA DO BOTÃO DA NUVEMSHOP
+                  app.isConnected ? (
+                    <div className="flex items-center gap-2 w-full animate-in fade-in duration-300">
+                      <Button
+                        onClick={() => setIsNuvemshopModalOpen(true)}
+                        className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white gap-2 h-10 text-xs shadow-sm"
+                      >
+                        <Settings2 size={14} /> Ver Webhook
+                      </Button>
+                      <Button
+                        onClick={handleDisconnectNuvemshop}
+                        variant="outline"
+                        size="icon"
+                        className="h-10 w-10 border-red-500/20 text-red-500 hover:bg-red-500/10 shrink-0 transition-colors"
+                      >
+                        <Unplug size={14} />
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      onClick={() => setIsNuvemshopModalOpen(true)}
+                      className="w-full h-10 gap-2 justify-center font-medium text-xs rounded-lg shadow-sm bg-foreground text-background hover:bg-foreground/90 transition-all"
+                    >
+                      <Settings2 size={14} /> Conectar Nuvemshop
                     </Button>
                   )
                 ) : (
@@ -732,6 +770,13 @@ export function IntegrationsList({
         open={isPagarmeModalOpen}
         onOpenChange={setIsPagarmeModalOpen}
         existingUrl={pagarmeUrl}
+      />
+
+      <NuvemshopSheet
+        open={isNuvemshopModalOpen}
+        onOpenChange={setIsNuvemshopModalOpen}
+        isConnected={isNuvemshopConnected}
+        storeName={nuvemshopStoreName}
       />
     </>
   );
