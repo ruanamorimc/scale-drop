@@ -1,237 +1,149 @@
-"use client";
+"use client"
 
-import * as React from "react";
-import {
-  format,
-  subDays,
-  startOfMonth,
-  endOfMonth,
-  subMonths,
-  startOfDay,
-  endOfDay,
-} from "date-fns";
-import { ptBR } from "date-fns/locale";
-import {
-  Calendar as CalendarIcon,
-  Check,
-  ChevronRight,
-  ChevronLeft,
-} from "lucide-react";
-import { DateRange } from "react-day-picker";
-
-import { cn } from "@/lib/utils";
-import { Button } from "@/components/ui/button";
-import { Calendar } from "@/components/ui/calendar";
+import * as React from "react"
+import { 
+  format, 
+  subDays, 
+  subMonths, 
+  startOfMonth, 
+  endOfMonth, 
+  startOfYear, 
+  endOfYear 
+} from "date-fns"
+import { ptBR } from "date-fns/locale"
+import { Calendar as CalendarIcon } from "lucide-react"
+import { DateRange } from "react-day-picker"
+import { cn } from "@/lib/utils"
+import { Button } from "@/components/ui/button"
+import { Calendar } from "@/components/ui/calendar"
 import {
   Popover,
   PopoverContent,
   PopoverTrigger,
-} from "@/components/ui/popover";
-import {
-  Command,
-  CommandGroup,
-  CommandItem,
-  CommandList,
-} from "@/components/ui/command";
-
-interface DatePickerWithRangeProps {
-  className?: string;
-  date: DateRange | undefined;
-  setDate: (date: DateRange | undefined) => void;
-}
-
-// Opções pré-definidas
-const PRESETS = [
-  {
-    label: "Hoje",
-    getValue: () => ({
-      from: startOfDay(new Date()),
-      to: endOfDay(new Date()),
-    }),
-  },
-  {
-    label: "Ontem",
-    getValue: () => ({
-      from: startOfDay(subDays(new Date(), 1)),
-      to: endOfDay(subDays(new Date(), 1)),
-    }),
-  },
-  {
-    label: "Últimos 7 dias",
-    getValue: () => ({
-      from: subDays(new Date(), 7),
-      to: new Date(),
-    }),
-  },
-  {
-    label: "Últimos 30 dias",
-    getValue: () => ({
-      from: subDays(new Date(), 30),
-      to: new Date(),
-    }),
-  },
-  {
-    label: "Este mês",
-    getValue: () => ({
-      from: startOfMonth(new Date()),
-      to: new Date(),
-    }),
-  },
-  {
-    label: "Mês passado",
-    getValue: () => ({
-      from: startOfMonth(subMonths(new Date(), 1)),
-      to: endOfMonth(subMonths(new Date(), 1)),
-    }),
-  },
-];
+} from "@/components/ui/popover"
 
 export function DatePickerWithRange({
   className,
   date,
   setDate,
-}: DatePickerWithRangeProps) {
-  const [open, setOpen] = React.useState(false);
-  const [view, setView] = React.useState<"presets" | "calendar">("presets");
-  const [selectedLabel, setSelectedLabel] = React.useState<string>("Hoje");
+}: {
+  className?: string
+  date: DateRange | undefined
+  setDate: (date: DateRange | undefined) => void
+}) {
+  const [isOpen, setIsOpen] = React.useState(false)
+  
+  // Estado temporário para segurar a data enquanto o usuário não clica em "Aplicar"
+  const [tempDate, setTempDate] = React.useState<DateRange | undefined>(date)
 
-  // Resetar a visualização para a lista sempre que abrir o popover
+  // Sincroniza o estado temporário quando a prop date ou o popover mudam
   React.useEffect(() => {
-    if (open) {
-      setView("presets");
+    if (isOpen) {
+      setTempDate(date)
     }
-  }, [open]);
+  }, [isOpen, date])
 
-  // Função para aplicar um preset
-  const handlePresetSelect = (preset: (typeof PRESETS)[number]) => {
-    setDate(preset.getValue());
-    setSelectedLabel(preset.label);
-    setOpen(false);
-  };
+  // Filtros rápidos estilo Kirvano
+  const presets = [
+    { label: "Hoje", getValue: () => ({ from: new Date(), to: new Date() }) },
+    { label: "Ontem", getValue: () => ({ from: subDays(new Date(), 1), to: subDays(new Date(), 1) }) },
+    { label: "Últimos 7 dias", getValue: () => ({ from: subDays(new Date(), 7), to: new Date() }) },
+    { label: "Últimos 30 dias", getValue: () => ({ from: subDays(new Date(), 30), to: new Date() }) },
+    { label: "Últimos 3 meses", getValue: () => ({ from: subMonths(new Date(), 3), to: new Date() }) },
+    { label: "Últimos 12 meses", getValue: () => ({ from: subMonths(new Date(), 12), to: new Date() }) },
+    { label: "Este mês", getValue: () => ({ from: startOfMonth(new Date()), to: endOfMonth(new Date()) }) },
+    { label: "Este ano", getValue: () => ({ from: startOfYear(new Date()), to: endOfYear(new Date()) }) },
+  ]
 
-  // Função para formatar o texto do botão
-  const getButtonText = () => {
-    if (selectedLabel === "Personalizado" && date?.from) {
-      if (date.to) {
-        return `${format(date.from, "dd/MM", { locale: ptBR })} - ${format(date.to, "dd/MM", { locale: ptBR })}`;
-      }
-      return format(date.from, "dd/MM/yyyy", { locale: ptBR });
-    }
-    return selectedLabel;
-  };
+  const handleApply = () => {
+    setDate(tempDate)
+    setIsOpen(false)
+  }
+
+  const handleCancel = () => {
+    setTempDate(date)
+    setIsOpen(false)
+  }
+
+  // Formatação para o rodapé do popover (ex: 9 de maio - 8 de junho de 2026)
+  const formatFooterDate = (range: DateRange | undefined) => {
+    if (!range?.from) return "Selecione uma data"
+    if (!range.to) return format(range.from, "d 'de' MMMM 'de' yyyy", { locale: ptBR })
+    return `${format(range.from, "d 'de' MMMM 'de' yyyy", { locale: ptBR })} - ${format(range.to, "d 'de' MMMM 'de' yyyy", { locale: ptBR })}`
+  }
 
   return (
-    <div className={cn("grid gap-2", className)}>
-      <Popover open={open} onOpenChange={setOpen}>
+    <div className={cn("grid gap-2 w-full", className)}>
+      <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
           <Button
             id="date"
             variant={"outline"}
             className={cn(
-              "w-full justify-between text-left font-normal h-10 border-border bg-background text-foreground hover:bg-muted/50",
-              !date && "text-muted-foreground",
+              "w-full justify-start text-left font-normal bg-background border-input hover:bg-accent/50 transition-colors h-10 px-3",
+              !date && "text-muted-foreground"
             )}
           >
-            <div className="flex items-center gap-2">
-              <CalendarIcon className="h-4 w-4 text-muted-foreground" />
-              <span className="truncate">{getButtonText()}</span>
-            </div>
+            <CalendarIcon className="mr-2 h-4 w-4 text-muted-foreground" />
+            {date?.from ? (
+              date.to ? (
+                <>
+                  {format(date.from, "dd/MM/yyyy")} - {format(date.to, "dd/MM/yyyy")}
+                </>
+              ) : (
+                format(date.from, "dd/MM/yyyy")
+              )
+            ) : (
+              <span>Selecione um período</span>
+            )}
           </Button>
         </PopoverTrigger>
-
-        <PopoverContent
-          className="w-auto p-0 bg-popover border-border"
-          align="start"
-        >
-          {view === "presets" ? (
-            // --- VISUALIZAÇÃO 1: LISTA DE OPÇÕES ---
-            <Command className="bg-transparent">
-              <CommandList>
-                <CommandGroup>
-                  {PRESETS.map((preset) => (
-                    <CommandItem
-                      key={preset.label}
-                      onSelect={() => handlePresetSelect(preset)}
-                      className="cursor-pointer aria-selected:bg-muted focus:bg-muted data-[disabled]:opacity-100"
-                    >
-                      <Check
-                        className={cn(
-                          "mr-2 h-4 w-4",
-                          selectedLabel === preset.label
-                            ? "opacity-100"
-                            : "opacity-0",
-                        )}
-                      />
-                      {preset.label}
-                    </CommandItem>
-                  ))}
-
-                  {/* Opção Personalizado -> Leva para o Calendário */}
-                  <CommandItem
-                    onSelect={() => {
-                      setView("calendar");
-                      setSelectedLabel("Personalizado");
-                    }}
-                    className="cursor-pointer aria-selected:bg-muted focus:bg-muted flex justify-between group"
-                  >
-                    <div className="flex items-center">
-                      <Check
-                        className={cn(
-                          "mr-2 h-4 w-4",
-                          selectedLabel === "Personalizado"
-                            ? "opacity-100"
-                            : "opacity-0",
-                        )}
-                      />
-                      Personalizado
-                    </div>
-                    <ChevronRight className="h-4 w-4 text-muted-foreground group-hover:text-foreground" />
-                  </CommandItem>
-                </CommandGroup>
-              </CommandList>
-            </Command>
-          ) : (
-            // --- VISUALIZAÇÃO 2: CALENDÁRIO ---
-            <div className="p-3">
-              <div className="flex items-center justify-between mb-4 px-1">
+        <PopoverContent className="w-auto p-0 shadow-2xl rounded-xl border-border overflow-hidden" align="start">
+          <div className="flex flex-col sm:flex-row">
+            {/* Sidebar de Atalhos (Kirvano Style) */}
+            <div className="flex flex-col gap-1 border-r border-border p-3 sm:w-44 w-full bg-muted/10 h-full overflow-y-auto">
+              {presets.map((preset) => (
                 <Button
+                  key={preset.label}
                   variant="ghost"
-                  size="sm"
-                  onClick={() => setView("presets")}
-                  className="h-7 px-2 text-muted-foreground hover:text-foreground -ml-2"
+                  className="justify-start text-sm font-medium text-muted-foreground hover:text-foreground hover:bg-muted/50 rounded-md px-3 py-2 h-auto"
+                  onClick={() => setTempDate(preset.getValue())}
                 >
-                  <ChevronLeft className="h-4 w-4 mr-1" /> Voltar
+                  {preset.label}
                 </Button>
-                <span className="text-xs font-semibold text-foreground">
-                  Selecionar datas
-                </span>
-              </div>
-
+              ))}
+            </div>
+            
+            {/* Calendário Duplo */}
+            <div className="p-3 bg-background flex flex-col">
               <Calendar
                 initialFocus
                 mode="range"
-                defaultMonth={date?.from}
-                selected={date}
-                onSelect={setDate}
+                defaultMonth={tempDate?.from}
+                selected={tempDate}
+                onSelect={setTempDate}
                 numberOfMonths={2}
                 locale={ptBR}
-                className="rounded-md border border-border bg-background"
               />
-
-              <div className="mt-4 flex justify-end gap-2">
-                <Button
-                  size="sm"
-                  onClick={() => setOpen(false)}
-                  disabled={!date?.from}
-                  className="bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  Aplicar
-                </Button>
+              
+              {/* Rodapé do Calendário */}
+              <div className="mt-4 pt-4 border-t border-border flex items-center justify-between">
+                <span className="text-xs text-muted-foreground hidden sm:inline-block pl-2">
+                  {formatFooterDate(tempDate)}
+                </span>
+                <div className="flex items-center gap-2">
+                  <Button variant="ghost" size="sm" onClick={handleCancel}>
+                    Cancelar
+                  </Button>
+                  <Button size="sm" onClick={handleApply} className="bg-blue-600 hover:bg-blue-700 text-white">
+                    Aplicar
+                  </Button>
+                </div>
               </div>
             </div>
-          )}
+          </div>
         </PopoverContent>
       </Popover>
     </div>
-  );
+  )
 }

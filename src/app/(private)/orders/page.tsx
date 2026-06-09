@@ -1,201 +1,165 @@
-"use client";
+import prisma from "@/lib/prisma";
+import { auth } from "@/lib/auth";
+import { headers } from "next/headers";
+import OrdersClient from "./order-client";
+import { Order } from "./columns";
 
-import { columns, Order } from "./columns";
-import { DataTable } from "@/components/data-table/DataTable";
-import { OrderDetails } from "@/components/orders/OrderDetails";
-import { useState, useMemo } from "react";
-import { Search, RotateCcw, Filter } from "lucide-react";
-import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-} from "@/components/ui/sheet";
-import { cn } from "@/lib/utils";
-import { subDays } from "date-fns";
-import { DateRange } from "react-day-picker";
-import { toast } from "sonner";
-import { DatePickerWithRange } from "@/components/date-range-picker";
+// ==========================================
+// 🔥 TIPAGEM LOCAL ESTRITA (Zero 'any')
+// ==========================================
+type LocalPaymentStatus = "PENDING" | "PAID" | "PARTIAL" | "REFUNDED" | "FAILED";
+type LocalOrderStatus = "PENDING" | "PROCESSING" | "CONFIRMED" | "PREPARING" | "SHIPPED" | "DELIVERED" | "CANCELLED" | "RETURNED";
 
-// --- DADOS MOCK ---
-const MOCK_DATA: Order[] = [
-  {
-    id: "1",
-    invoiceId: "#INV-1001",
-    customer: { name: "Ruan Amorim", email: "ruan@test.com", avatar: "" },
-    date: "21/10/2024",
-    time: "14:30",
-    paymentStatus: "paid",
-    paymentMethod: "Cartão de Crédito",
-    amount: 250,
-    cmv: 120,
-    tax: 15,
-    marketing: 50,
-    netProfit: 65,
-    status: "delivered",
-    items: [],
-  },
-  {
-    id: "2",
-    invoiceId: "#INV-8923",
-    customer: { name: "Daniel", email: "daniel@test.com", avatar: "" },
-    date: "31/10/2024",
-    time: "09:15",
-    paymentStatus: "paid",
-    paymentMethod: "Pix",
-    amount: 99,
-    cmv: 40,
-    tax: 5,
-    marketing: 20,
-    netProfit: 34,
-    status: "pending",
-    items: [],
-  },
-  // Gerando mais dados para preencher a tela
-  ...Array.from({ length: 15 }).map((_, i) => ({
-    id: `${i + 3}`,
-    invoiceId: `#INV-${2000 + i}`,
-    customer: {
-      name: `Cliente Teste ${i}`,
-      email: `cliente${i}@test.com`,
-      avatar: "",
-    },
-    date: "05/11/2024",
-    time: "10:00",
-    paymentStatus: "paid" as const,
-    paymentMethod: "Pix" as const,
-    amount: Math.floor(Math.random() * 500) + 50,
-    status: "delivered",
-    items: [],
-  })),
-];
+// O TRUQUE: Extraímos o tipo exato do 'where' da sua própria instância do Prisma.
+type OrderWhereInput = NonNullable<Parameters<typeof prisma.order.findMany>[0]>["where"];
 
-export default function OrdersPage() {
-  const [searchTerm, setSearchTerm] = useState("");
-  const [date, setDate] = useState<DateRange | undefined>({
-    from: subDays(new Date(), 30),
-    to: new Date(),
+export const dynamic = "force-dynamic";
+
+export default async function OrdersPage(props: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }> | { [key: string]: string | string[] | undefined };
+}) {
+  const searchParams = await props.searchParams;
+  const { status, paymentStatus, method, from, to } = searchParams || {};
+
+  const session = await auth.api.getSession({
+    headers: await headers(),
   });
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
-  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  // --- LÓGICA DE FILTRAGEM ---
-  const filteredData = useMemo(() => {
-    return MOCK_DATA.filter((order) => {
-      const searchLower = searchTerm.toLowerCase();
-      const matchesSearch =
-        order.invoiceId.toLowerCase().includes(searchLower) ||
-        order.customer.name.toLowerCase().includes(searchLower) ||
-        order.customer.email.toLowerCase().includes(searchLower);
+  if (!session?.user) {
+    return <div>Utilizador não autenticado.</div>;
+  }
 
-      return matchesSearch;
-    });
-  }, [searchTerm, date]);
+  const taxesConfig = await prisma.tax.findMany();
+  const revenueTaxConfig = taxesConfig.find((t) => t.calculationRule === "Sobre Faturamento");
+  const revenueTaxRate = revenueTaxConfig ? Number(revenueTaxConfig.rate) / 100 : 0;
+  const metaTaxConfig = taxesConfig.find((t) => t.calculationRule === "Ad Spend" || t.name.includes("Meta"));
+  const metaTaxRate = metaTaxConfig ? Number(metaTaxConfig.rate) / 100 : 0;
 
-  // --- ACTIONS ---
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    setTimeout(() => {
-      setIsRefreshing(false);
-      toast.success("Lista atualizada", {
-        description: "Os pedidos foram sincronizados com sucesso.",
-      });
-    }, 1000);
+  // ==========================================
+  // FILTROS 100% TIPADOS
+  // ==========================================
+  
+  const whereClause: OrderWhereInput = {
+    userId: session.user.id,
   };
 
-  return (
-    <div className="flex flex-col h-full w-full p-8 space-y-8">
-      {/* 1. CABEÇALHO */}
-      <div className="flex items-center justify-between">
-        <div>
-          {/* CORRIGIDO: text-foreground */}
-          <h2 className="text-2xl font-bold tracking-tight text-foreground">
-            Pedidos
-          </h2>
-          <p className="text-muted-foreground">
-            Gerencie e acompanhe todos os pedidos da sua loja.
-          </p>
-        </div>
+  // Status Financeiro
+  if (paymentStatus && paymentStatus !== "all") {
+    const statuses = String(paymentStatus).split(",");
+    whereClause.paymentStatus = {
+      in: statuses.map((s) => {
+        const up = s.toUpperCase();
+        return (up === 'FAILED' || up === 'CANCELLED' ? 'FAILED' : up) as LocalPaymentStatus;
+      }),
+    };
+  }
 
-        <Button
-          onClick={handleRefresh}
-          className="text-white bg-blue-600 transition-all duration-300 hover:bg-blue-700 hover:shadow-[0_0_10px_1px_rgba(37,99,235,0.6)] hover:-translate-y-0.5"
-        >
-          <RotateCcw
-            className={cn("h-4 w-4", isRefreshing && "animate-spin")}
-          />
-          Atualizar Pedidos
-        </Button>
-      </div>
+  // Status de Envio
+  if (status) {
+    const statuses = String(status).split(",");
+    whereClause.status = {
+      in: statuses.map((s) => s.toUpperCase() as LocalOrderStatus),
+    };
+  }
 
-      {/* 2. BARRA DE FERRAMENTAS */}
-      <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
-        <div className="flex flex-col sm:flex-row items-center gap-3 w-full sm:w-auto">
-          <div className="relative w-full sm:w-72 group">
-            {/* CORRIGIDO: Cores do ícone de busca */}
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground group-focus-within:text-foreground transition-colors" />
-            <Input
-              placeholder="Buscar por nome, SKU ou tag..."
-              // CORRIGIDO: Cores do Input (bg-muted/40, border-border, text-foreground)
-              className="pl-9 h-10 bg-muted/40 border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-blue-500/20 focus-visible:border-blue-500/50 transition-all"
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-            />
-          </div>
+  // Métodos de Pagamento (Or customizado)
+  if (method) {
+    const methods = String(method).split(",");
+    whereClause.OR = methods.map((m) => {
+      const trimmed = m.trim();
+      const searchVal = trimmed === "Cartão de Crédito" ? "credit" : trimmed === "Boleto" ? "billet" : trimmed;
+      return { paymentMethod: { contains: searchVal, mode: "insensitive" } };
+    });
+  }
 
-          <div className="w-full sm:w-auto">
-            <DatePickerWithRange date={date} setDate={setDate} />
-          </div>
+  // Datas
+  if (from || to) {
+    whereClause.createdAt = {
+      ...(from && { gte: new Date(String(from)) }),
+      ...(to && { lte: new Date(new Date(String(to)).setHours(23, 59, 59, 999)) }),
+    };
+  }
 
-          <Button
-            variant="outline"
-            // CORRIGIDO: Cores do Botão Filtro
-            className="h-10 px-4 bg-muted/40 border-border text-muted-foreground hover:text-foreground hover:bg-accent gap-2"
-          >
-            <Filter className="h-4 w-4" />
-            <span>Filtros</span>
-          </Button>
-        </div>
-      </div>
+  const dbOrders = await prisma.order.findMany({
+    where: whereClause,
+    orderBy: { createdAt: "desc" },
+    include: {
+      storeIntegration: true,
+      items: { include: { product: true } },
+    },
+  });
 
-      {/* 3. TABELA */}
-      <div className="flex-1 overflow-hidden">
-        <DataTable
-          columns={columns}
-          data={filteredData}
-          onRowClick={(row) => setSelectedOrder(row)}
-        />
-      </div>
+  const realOrders: Order[] = dbOrders.map((order) => {
+    const orderDate = new Date(order.createdAt);
+    const dateFormatted = new Intl.DateTimeFormat("pt-BR").format(orderDate);
+    const timeFormatted = new Intl.DateTimeFormat("pt-BR", { hour: "2-digit", minute: "2-digit" }).format(orderDate);
 
-      {/* 4. SHEET DETALHES (FLUTUANTE) */}
-      <Sheet
-        open={!!selectedOrder}
-        onOpenChange={(open) => !open && setSelectedOrder(null)}
-      >
-        <SheetContent
-          className={cn(
-            // CORRIGIDO: bg-background (para branco/preto correto) e border-border
-            "w-[400px] sm:w-[540px] bg-background p-0 shadow-2xl",
-            "border border-border", // Borda adaptável
-            "mt-4 mr-4 mb-4",
-            "h-[calc(100vh-32px)]",
-            "rounded-2xl",
-            "focus:outline-none",
-          )}
-        >
-          <SheetHeader className="sr-only">
-            <SheetTitle>Detalhes do Pedido</SheetTitle>
-          </SheetHeader>
-          {selectedOrder && (
-            <OrderDetails
-              order={selectedOrder}
-              onClose={() => setSelectedOrder(null)}
-            />
-          )}
-        </SheetContent>
-      </Sheet>
-    </div>
-  );
+    let storeUrl: string | undefined = undefined;
+    const platform = order.storeIntegration?.platform;
+    const domain = (order.storeIntegration as { domain?: string })?.domain || "sua-loja.com";
+    if (platform && order.externalOrderId) {
+      switch (String(platform).toUpperCase()) {
+        case "SHOPIFY":
+        case "NUVEMSHOP":
+          storeUrl = `https://${domain}/admin/orders/${order.externalOrderId}`;
+          break;
+        case "YAMPI":
+          storeUrl = `https://dashboard.yampi.com.br/orders/${order.externalOrderId}`;
+          break;
+      }
+    }
+
+    const orderData = order as typeof order & { gatewayFee?: number | null; marketingCost?: number | null; };
+    const totalAmount = Number(order.total) || 0;
+    const totalCmv = order.items?.reduce((acc, item) => acc + (Number(item.product?.costPrice) || 0) * Number(item.quantity), 0) || 0;
+    let gatewayFee = Number(orderData.gatewayFee) || 0;
+    if (gatewayFee === 0) gatewayFee = totalAmount * 0.0499 + 1.0;
+    const marketingCost = Number(orderData.marketingCost) || 0;
+    const totalTaxes = (totalAmount * revenueTaxRate) + (marketingCost * metaTaxRate);
+    const netProfit = totalAmount - (totalCmv + gatewayFee + totalTaxes + marketingCost);
+
+    const rawPaymentStatus = order.paymentStatus?.toLowerCase() || "pending";
+    const rawOrderStatus = order.status?.toLowerCase() || "pending";
+
+    // ==========================================
+    // 🔥 TRADUTOR DO MÉTODO DE PAGAMENTO
+    // Converte os nomes crus do banco para nomes bonitos na interface
+    // ==========================================
+    const rawPaymentMethod = (order.paymentMethod || "").toLowerCase();
+    let displayMethod: "Cartão de Crédito" | "Pix" | "Boleto" = "Cartão de Crédito"; // Padrão
+    
+    if (rawPaymentMethod.includes("pix")) {
+      displayMethod = "Pix";
+    } else if (rawPaymentMethod.includes("boleto") || rawPaymentMethod.includes("billet")) {
+      displayMethod = "Boleto";
+    }
+    // Se for credit_card, credit ou qualquer outra coisa, já cai no Cartão de Crédito padrão acima.
+
+    return {
+      id: order.id,
+      invoiceId: order.orderNumber ? String(order.orderNumber) : "N/A",
+      customer: { name: order.customerName || "Cliente não informado", email: order.customerEmail || "", avatar: "" },
+      date: dateFormatted,
+      time: timeFormatted,
+      
+      paymentStatus: (rawPaymentStatus === "failed" ? "cancelled" : rawPaymentStatus) as "paid" | "pending" | "cancelled" | "refunded",
+      
+      // Enviando o nome bonito formatado!
+      paymentMethod: displayMethod,
+      
+      amount: totalAmount,
+      cmv: totalCmv,
+      tax: totalTaxes + gatewayFee,
+      marketing: marketingCost,
+      netProfit: netProfit,
+      
+      status: rawOrderStatus as "pending" | "processing" | "confirmed" | "preparing" | "shipped" | "delivered" | "cancelled" | "returned",
+      
+      items: order.items?.map((item) => ({ name: item.name || "Produto sem nome", price: Number(item.unitPrice) || 0, image: item.product?.images?.[0] || "", quantity: Number(item.quantity) || 1 })) || [],
+      storeUrl,
+      trackingNumber: order.trackingNumber || undefined,
+    } as Order;
+  });
+
+  return <OrdersClient initialOrders={realOrders} />;
 }

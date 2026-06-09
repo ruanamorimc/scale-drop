@@ -69,6 +69,18 @@ export function StatusBadge({ status }: StatusBadgeProps) {
       icon: <XCircle size={14} />,
       className: "text-red-600 bg-red-100 dark:bg-red-900/30 dark:text-red-400",
     },
+        confirmed: {
+      label: "Confirmado",
+      icon: <CheckCircle size={14} />,
+      className:
+        "text-blue-600 bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400",
+    },
+    cancelled: {
+      label: "Cancelado",
+      icon: <XCircle size={14} />,
+      className:
+        "text-zinc-500 bg-zinc-100 dark:bg-zinc-900 dark:text-zinc-400",
+    },
     // --- NOVAS CATEGORIAS DE DESPESA ---
     ferramentas: {
       label: "Ferramentas",

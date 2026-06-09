@@ -1,9 +1,10 @@
-import { 
-  CheckCircle2, 
-  Clock, 
-  XCircle, 
-  MoreHorizontal, 
-  AlertCircle 
+import {
+  CheckCircle2,
+  Clock,
+  XCircle,
+  MoreHorizontal,
+  AlertCircle,
+  CheckCircle,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -16,43 +17,62 @@ interface PaymentStatusBadgeProps {
 
 export function PaymentStatusBadge({ status }: PaymentStatusBadgeProps) {
   const safeStatus = status || "pending";
-  
+
   // Mapa de Configuração: Icone, Texto e Cores para cada status
-  const statusConfig: Record<string, { label: string; icon: React.ReactNode; className: string }> = {
+  const statusConfig: Record<
+    string,
+    { label: string; icon: React.ReactNode; className: string }
+  > = {
     paid: {
       label: "Pago",
       icon: <CheckCircle2 size={14} />,
-      className: "text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-900"
+      className:
+        "text-green-600 bg-green-100 dark:bg-green-900/30 dark:text-green-400 border-green-200 dark:border-green-900",
     },
     pending: {
       label: "Pendente",
       icon: <Clock size={14} />,
-      className: "text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30 dark:text-yellow-400 border-yellow-200 dark:border-yellow-900"
+      className:
+        "text-yellow-600 bg-yellow-100 dark:bg-yellow-900/30 dark:text-yellow-400 border-yellow-200 dark:border-yellow-900",
     },
     cancelled: {
       label: "Cancelado",
       icon: <XCircle size={14} />,
-      className: "text-red-600 bg-red-100 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-900"
+      className:
+        "text-zinc-500 bg-zinc-100 dark:bg-zinc-900/30 dark:text-zinc-400 border-zinc-200 dark:border-zinc-900",
     },
     refunded: {
       label: "Reembolsado",
       icon: <MoreHorizontal size={14} />,
-      className: "text-neutral-600 bg-neutral-100 dark:bg-neutral-800 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700"
-    }
+      className:
+        "text-neutral-600 bg-neutral-100 dark:bg-neutral-800 dark:text-neutral-400 border-neutral-200 dark:border-neutral-700",
+    },
+    failed: {
+      label: "Recusado",
+      icon: <XCircle size={14} />,
+      className:
+        "text-red-600 bg-red-100 dark:bg-red-900/30 dark:text-red-400 border-red-200 dark:border-red-900",
+    },
+    confirmed: {
+      label: "Confirmado",
+      icon: <CheckCircle size={14} />,
+      className:
+        "text-blue-600 bg-blue-100 dark:bg-blue-900/30 dark:text-blue-400 border-blue-200 dark:border-blue-900",
+    },
   };
 
   // Pega a config ou usa um default (safety fallback)
   const config = statusConfig[safeStatus.toLowerCase()] || {
     label: safeStatus,
     icon: <AlertCircle size={14} />,
-    className: "text-gray-500 bg-gray-100 border-gray-200"
+    className: "text-gray-500 bg-gray-100 border-gray-200",
   };
 
   return (
     <div
       className={cn(
         "flex w-fit items-center gap-2 rounded-md px-2.5 py-1 text-xs font-medium transition-colors border",
-        config.className
+        config.className,
       )}
     >
       {config.icon}

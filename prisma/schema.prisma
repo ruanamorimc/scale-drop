@@ -572,6 +572,10 @@ model Order {
   discount     Decimal @default(0) @db.Decimal(10, 2)
   total        Decimal @db.Decimal(10, 2)
 
+  // Taxa retida pelo gateway e Custo do Meta ADS
+  gatewayFee   Decimal? @default(0) @db.Decimal(10, 2)
+  marketingCost Decimal? @default(0) @db.Decimal(10, 2)
+
   // Informações de pagamento
   paymentMethod String?
   paymentStatus PaymentStatus @default(PENDING)

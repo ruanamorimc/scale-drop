@@ -42,7 +42,6 @@ interface DataTableProps<TData, TValue> {
   hidePagination?: boolean;
   enableResizing?: boolean;
   onSelectionChange?: (selectedRows: TData[]) => void;
-  scrollableContainer?: boolean;
   classNames?: {
     container?: string;
     headerRow?: string;
@@ -62,7 +61,6 @@ export function DataTable<TData, TValue>({
   hidePagination = false,
   enableResizing = false,
   onSelectionChange,
-  scrollableContainer = false,
   classNames,
 }: DataTableProps<TData, TValue>) {
   const [sorting, setSorting] = useState<SortingState>([]);
@@ -111,153 +109,139 @@ export function DataTable<TData, TValue>({
   return (
     <div
       className={cn(
-        "flex flex-col w-full bg-background",
-        // 🔥 CORREÇÃO: Força altura 100% para ocupar o container pai da página
-        scrollableContainer ? "h-full" : "",
+        // 🔥 1. CONTAINER PAI: h-full garante que ele não ultrapasse a tela
+        "flex flex-col h-full w-full bg-background",
         classNames?.container,
       )}
     >
       {toolbar && <div className="shrink-0 mb-3 px-1">{toolbar(table)}</div>}
 
-      <div
-        className={cn(
-          "border rounded-md border-border w-full",
-          // 🔥 CORREÇÃO: Usa flex-1 para expandir e ocupar o espaço restante
-          scrollableContainer
-            ? "flex flex-col flex-1 min-h-0 overflow-hidden relative"
-            : "overflow-auto custom-scrollbar",
-        )}
-      >
-        <div
+      {/* 🔥 2. CONTAINER DA TABELA: O flex-1 e min-h-0 forçam o scroll interno aparecer */}
+      <div className="flex-1 min-h-0 border rounded-md border-border relative overflow-auto custom-scrollbar">
+        <Table
+          style={{ width: enableResizing ? table.getTotalSize() : "100%" }}
           className={cn(
-            scrollableContainer
-              ? "absolute inset-0 overflow-auto custom-scrollbar bg-background"
-              : "",
+            enableResizing ? "border-separate border-spacing-0" : "w-full",
           )}
         >
-          <Table
-            style={{ width: enableResizing ? table.getTotalSize() : "100%" }}
-            className={cn(
-              enableResizing ? "border-separate border-spacing-0" : "w-full",
-            )}
+          {/* Cabeçalho Sticky (Fixo no topo ao rolar) */}
+          <TableHeader
+            className={cn("z-20 sticky top-0 bg-card", classNames?.headerRow)}
           >
-            <TableHeader className={cn("z-20", classNames?.headerRow)}>
-              {table.getHeaderGroups().map((headerGroup) => (
-                <TableRow
-                  key={headerGroup.id}
-                  className={cn(
-                    "border-b border-border hover:bg-transparent",
-                    classNames?.headerRow,
-                  )}
-                >
-                  {headerGroup.headers.map((header) => {
-                    const isSelect = header.id === "select";
-                    return (
-                      <TableHead
-                        key={header.id}
-                        colSpan={header.colSpan}
-                        style={{ width: isSelect ? "48px" : header.getSize() }}
-                        className={cn(
-                          "h-10 text-[11px] font-bold uppercase text-muted-foreground tracking-wide px-4 whitespace-nowrap shadow-sm bg-card",
-                          scrollableContainer ? "sticky top-0 z-20" : "",
-                          enableResizing
-                            ? "border-r border-border/50 last:border-r-0"
-                            : "",
-                          isSelect ? "w-[48px] px-0 text-center" : "",
-                          classNames?.headerCell,
-                        )}
-                      >
-                        {header.isPlaceholder
-                          ? null
-                          : flexRender(
-                              header.column.columnDef.header,
-                              header.getContext(),
-                            )}
-                        {enableResizing && header.column.getCanResize() && (
+            {table.getHeaderGroups().map((headerGroup) => (
+              <TableRow
+                key={headerGroup.id}
+                className={cn(
+                  "border-b border-border hover:bg-transparent",
+                  classNames?.headerRow,
+                )}
+              >
+                {headerGroup.headers.map((header) => {
+                  const isSelect = header.id === "select";
+                  return (
+                    <TableHead
+                      key={header.id}
+                      colSpan={header.colSpan}
+                      style={{
+                        width: isSelect ? "48px" : header.getSize(),
+                      }}
+                      className={cn(
+                        "h-10 text-[11px] font-bold uppercase text-muted-foreground tracking-wide px-4 whitespace-nowrap shadow-[0_1px_0_0_theme(colors.border)]",
+                        enableResizing
+                          ? "border-r border-border/50 last:border-r-0"
+                          : "",
+                        isSelect ? "w-[52px] min-w-[52px] max-w-[52px]" : "",
+                        classNames?.headerCell,
+                      )}
+                    >
+                      {header.isPlaceholder
+                        ? null
+                        : flexRender(
+                            header.column.columnDef.header,
+                            header.getContext(),
+                          )}
+                      {enableResizing && header.column.getCanResize() && (
+                        <div
+                          onMouseDown={header.getResizeHandler()}
+                          onTouchStart={header.getResizeHandler()}
+                          className={cn(
+                            "absolute right-0 top-0 h-full w-[5px] cursor-col-resize user-select-none touch-action-none z-30 flex justify-center opacity-0 group-hover:opacity-100 transition-opacity",
+                            header.column.getIsResizing() ? "opacity-100" : "",
+                          )}
+                        >
                           <div
-                            onMouseDown={header.getResizeHandler()}
-                            onTouchStart={header.getResizeHandler()}
                             className={cn(
-                              "absolute right-0 top-0 h-full w-[5px] cursor-col-resize user-select-none touch-action-none z-30 flex justify-center",
-                              "opacity-0 group-hover:opacity-100 transition-opacity",
+                              "h-full w-[1px] bg-primary/50",
                               header.column.getIsResizing()
-                                ? "opacity-100"
+                                ? "bg-primary w-[2px]"
                                 : "",
                             )}
-                          >
-                            <div
-                              className={cn(
-                                "h-full w-[1px] bg-primary/50",
-                                header.column.getIsResizing()
-                                  ? "bg-primary w-[2px]"
-                                  : "",
-                              )}
-                            />
-                          </div>
+                          />
+                        </div>
+                      )}
+                    </TableHead>
+                  );
+                })}
+              </TableRow>
+            ))}
+          </TableHeader>
+
+          <TableBody>
+            {table.getRowModel().rows?.length ? (
+              table.getRowModel().rows.map((row) => (
+                <TableRow
+                  key={row.id}
+                  data-state={row.getIsSelected() && "selected"}
+                  className={cn(
+                    "border-b border-border hover:bg-muted/50 transition-colors bg-background",
+                    onRowClick ? "cursor-pointer" : "",
+                    classNames?.row,
+                  )}
+                  onClick={() => onRowClick && onRowClick(row.original)}
+                >
+                  {row.getVisibleCells().map((cell) => {
+                    const isSelect = cell.column.id === "select";
+                    return (
+                      <TableCell
+                        key={cell.id}
+                        className={cn(
+                          "py-3 px-4 text-[13px] whitespace-nowrap overflow-hidden text-ellipsis",
+                          enableResizing
+                            ? "border-r border-border/30 last:border-r-0"
+                            : "",
+                          isSelect ? "w-[48px] px-0 text-center" : "",
+                          classNames?.cell,
                         )}
-                      </TableHead>
+                        style={{
+                          width: isSelect ? "48px" : cell.column.getSize(),
+                        }}
+                      >
+                        {flexRender(
+                          cell.column.columnDef.cell,
+                          cell.getContext(),
+                        )}
+                      </TableCell>
                     );
                   })}
                 </TableRow>
-              ))}
-            </TableHeader>
-
-            <TableBody>
-              {table.getRowModel().rows?.length ? (
-                table.getRowModel().rows.map((row) => (
-                  <TableRow
-                    key={row.id}
-                    data-state={row.getIsSelected() && "selected"}
-                    className={cn(
-                      "border-b border-border hover:bg-muted/50 transition-colors bg-background",
-                      onRowClick ? "cursor-pointer" : "",
-                      classNames?.row,
-                    )}
-                    onClick={() => onRowClick && onRowClick(row.original)}
-                  >
-                    {row.getVisibleCells().map((cell) => {
-                      const isSelect = cell.column.id === "select";
-                      return (
-                        <TableCell
-                          key={cell.id}
-                          className={cn(
-                            "py-3 px-4 text-[13px] whitespace-nowrap overflow-hidden text-ellipsis",
-                            enableResizing
-                              ? "border-r border-border/30 last:border-r-0"
-                              : "",
-                            isSelect ? "w-[48px] px-0 text-center" : "",
-                            classNames?.cell,
-                          )}
-                          style={{
-                            width: isSelect ? "48px" : cell.column.getSize(),
-                          }}
-                        >
-                          {flexRender(
-                            cell.column.columnDef.cell,
-                            cell.getContext(),
-                          )}
-                        </TableCell>
-                      );
-                    })}
-                  </TableRow>
-                ))
-              ) : (
-                <TableRow>
-                  <TableCell
-                    colSpan={columns.length}
-                    className="h-24 text-center text-muted-foreground"
-                  >
-                    Sem resultados encontrados.
-                  </TableCell>
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
+              ))
+            ) : (
+              <TableRow>
+                <TableCell
+                  colSpan={columns.length}
+                  className="h-24 text-center text-muted-foreground"
+                >
+                  Sem resultados encontrados.
+                </TableCell>
+              </TableRow>
+            )}
+          </TableBody>
+        </Table>
       </div>
 
+      {/* 🔥 3. PAGINAÇÃO: O shrink-0 impede que ela seja esmagada ou cortada para fora da tela */}
       {!hidePagination && (
-        <div className="shrink-0 pt-3 border-t border-border mt-0">
+        <div className="shrink-0 pt-4 mt-2">
           <div className="flex items-center justify-between px-2">
             <div className="flex items-center gap-4 text-sm text-muted-foreground">
               <div className="flex items-center gap-2">
@@ -289,7 +273,7 @@ export function DataTable<TData, TValue>({
             <div className="flex items-center space-x-4 lg:space-x-6">
               <div className="flex items-center justify-center text-xs font-medium text-muted-foreground">
                 Pág {table.getState().pagination.pageIndex + 1} de{" "}
-                {table.getPageCount()}
+                {table.getPageCount() || 1}
               </div>
               <div className="flex items-center space-x-2">
                 <Button

@@ -3,18 +3,13 @@
 import { ColumnDef } from "@tanstack/react-table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
-import { MoreHorizontal, ArrowUpDown } from "lucide-react";
+import { ArrowUpDown } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
 import { StatusBadge } from "@/components/data-table/StatusBadge";
 import { PaymentStatusBadge } from "@/components/data-table/PaymentStatusBadge";
+import { PaymentMethodBadge } from "@/components/data-table/PaymentMethodBadge";
 
 const formatCurrency = (val: number | undefined) => {
   return new Intl.NumberFormat("pt-BR", {
@@ -47,6 +42,8 @@ export type Order = {
     image: string;
     quantity: number;
   }[];
+  storeUrl?: string;
+  trackingNumber?: string;
 };
 
 export const columns: ColumnDef<Order>[] = [
@@ -138,9 +135,7 @@ export const columns: ColumnDef<Order>[] = [
       return (
         <div className="flex flex-col items-start gap-1 min-w-[100px]">
           <PaymentStatusBadge status={status} />
-          <span className="text-[10px] text-muted-foreground ml-1 truncate max-w-[100px]">
-            {method}
-          </span>
+          <PaymentMethodBadge method={method} />
         </div>
       );
     },
@@ -240,38 +235,5 @@ export const columns: ColumnDef<Order>[] = [
         <StatusBadge status={row.getValue("status")} />
       </div>
     ),
-  },
-
-  // 11. AÇÕES
-  {
-    id: "actions",
-    cell: ({ row }) => {
-      return (
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button
-              variant="ghost"
-              className="h-8 w-8 p-0 text-muted-foreground hover:text-foreground"
-              onClick={(e) => e.stopPropagation()}
-            >
-              <span className="sr-only">Abrir menu</span>
-              <MoreHorizontal className="h-4 w-4" />
-            </Button>
-          </DropdownMenuTrigger>
-          {/* CORRIGIDO: Removido bg-zinc-950, usando o padrão do componente (bg-popover) */}
-          <DropdownMenuContent align="end">
-            <DropdownMenuItem
-              onClick={() => navigator.clipboard.writeText(row.original.id)}
-              className="cursor-pointer"
-            >
-              Copiar ID Interno
-            </DropdownMenuItem>
-            <DropdownMenuItem className="cursor-pointer">
-              Ver Detalhes
-            </DropdownMenuItem>
-          </DropdownMenuContent>
-        </DropdownMenu>
-      );
-    },
   },
 ];
