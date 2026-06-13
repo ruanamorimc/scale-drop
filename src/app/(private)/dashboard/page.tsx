@@ -10,7 +10,6 @@ import { DashboardHeader } from "@/components/dashboard/DashboardHeader";
 import { getFinanceMetrics } from "@/actions/finance-overview";
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
 
-// 🔥 1. Alteramos a tipagem para ser uma Promise (Exigência do Next.js 15)
 export default async function DashboardPage({
   searchParams,
 }: {
@@ -21,26 +20,27 @@ export default async function DashboardPage({
 
   if (!user) unauthorized();
 
-  // 🔥 2. O GRANDE TRUQUE: Precisamos de aguardar (await) os parâmetros da URL
+  // Aguarda os parâmetros da URL
   const params = await searchParams;
 
   let from: Date | undefined = undefined;
   let to: Date | undefined = undefined;
 
-  // 3. Agora extraímos o "from" e o "to" da variável "params" já resolvida
   if (typeof params.from === "string") {
-    // Forçamos o início do dia no fuso horário local (-03:00)
+    // Forçamos o fuso horário local (-03:00)
     from = new Date(`${params.from}T00:00:00-03:00`);
   }
 
   if (typeof params.to === "string") {
-    // Forçamos o final do dia no fuso horário local (-03:00)
+    // Forçamos o fuso horário local (-03:00)
     to = new Date(`${params.to}T23:59:59-03:00`);
   }
 
-  // Passamos as datas corretas para a Action
   const financeData = await getFinanceMetrics(from, to);
-  const safeData = financeData || {};
+
+  // 🔥 TRUQUE SÊNIOR: Forçamos o TypeScript a entender o formato do safeData
+  // baseando-se no retorno real da função getFinanceMetrics, eliminando o erro da linha 54 e sem usar "any".
+  const safeData = financeData || ({} as NonNullable<typeof financeData>);
 
   return (
     <DashboardProvider>
@@ -51,7 +51,7 @@ export default async function DashboardPage({
 
         <div className="grid grid-cols-1 xl:grid-cols-3 gap-6 items-start">
           <div className="xl:col-span-2 space-y-6">
-            <ChartBarStacked data={safeData.chartData} />
+            <ChartBarStacked data={safeData} />
             <CardMetrics data={safeData} />
           </div>
 
@@ -65,7 +65,8 @@ export default async function DashboardPage({
         </div>
 
         <div className="w-full overflow-hidden">
-          <RecentOrdersTable />
+          {/* 🔥 Agora sim! Injetamos as datas na tabela de Pedidos Recentes */}
+          <RecentOrdersTable from={from} to={to} />
         </div>
       </main>
     </DashboardProvider>

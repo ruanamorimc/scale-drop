@@ -1,6 +1,6 @@
 "use client";
 
-import { CreditCard, Barcode, Banknote, PieChart } from "lucide-react";
+import { CreditCard, Barcode, PieChart } from "lucide-react";
 import { PremiumCard } from "@/components/cards/PremiumCard";
 import { useDashboard } from "@/components/dashboard/DashboardContext";
 import { cn } from "@/lib/utils";
@@ -26,6 +26,41 @@ interface ConversionCardProps {
   data: ConversionData;
   isValuesVisible: boolean; // Recebe o status do Olho
 }
+
+interface PaymentMetrics {
+  paid: number;
+  paidCount: number;
+  pending: number;
+  pendingCount: number;
+  refused: number;
+  refusedCount: number;
+}
+
+export interface FinanceData {
+  countPaid?: number;
+  countGenerated?: number;
+  metrics?: {
+    card: PaymentMetrics;
+    pix: PaymentMetrics;
+    boleto: PaymentMetrics;
+  };
+  [key: string]: unknown; // Permite que o resto dos dados passe sem quebrar a tipagem
+}
+
+// ==========================================
+// 1. ÍCONE DO PIX
+// ==========================================
+const PixIcon = ({ size = 14 }: { size?: number }) => (
+  <svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 512 512"
+    width={size}
+    height={size}
+    fill="currentColor"
+  >
+    <path d="M242.4 292.5c5.4-5.4 14.7-5.4 20.1 0l77 77c14.2 14.2 33.1 22 53.1 22l15.1 0-97.1 97.1c-30.3 29.5-79.5 29.5-109.8 0l-97.5-97.4 9.3 0c20 0 38.9-7.8 53.1-22l76.7-76.7zm20.1-73.6c-6.4 5.5-14.6 5.6-20.1 0l-76.7-76.7c-14.2-15.1-33.1-22-53.1-22l-9.3 0 97.4-97.4c30.4-30.3 79.6-30.3 109.9 0l97.2 97.1-15.2 0c-20 0-38.9 7.8-53.1 22l-77 77zM112.6 142.7c13.8 0 26.5 5.6 37.1 15.4l76.7 76.7c7.2 6.3 16.6 10.8 26.1 10.8 9.4 0 18.8-4.5 26-10.8l77-77c9.8-9.7 23.3-15.3 37.1-15.3l37.7 0 58.3 58.3c30.3 30.3 30.3 79.5 0 109.8l-58.3 58.3-37.7 0c-13.8 0-27.3-5.6-37.1-15.4l-77-77c-13.9-13.9-38.2-13.9-52.1 .1l-76.7 76.6c-10.6 9.8-23.3 15.4-37.1 15.4l-31.8 0-58-58c-30.3-30.3-30.3-79.5 0-109.8l58-58.1 31.8 0z" />
+  </svg>
+);
 
 // ==========================================
 // 1. CARD INDIVIDUAL (Cartão, Pix, Boleto)
@@ -182,10 +217,23 @@ const PaymentDistributionCard = ({
   data,
   isValuesVisible,
 }: {
-  data: any;
+  data: FinanceData;
   isValuesVisible: boolean;
 }) => {
-  const m = data.metrics || { card: {}, pix: {}, boleto: {} };
+  // 1. Fallback perfeito garantindo que todas as propriedades existam
+  const emptyMetric: PaymentMetrics = {
+    paid: 0,
+    paidCount: 0,
+    pending: 0,
+    pendingCount: 0,
+    refused: 0,
+    refusedCount: 0,
+  };
+  const m = data.metrics || {
+    card: emptyMetric,
+    pix: emptyMetric,
+    boleto: emptyMetric,
+  };
 
   const cardCount = m.card.paidCount || 0;
   const pixCount = m.pix.paidCount || 0;
@@ -201,10 +249,13 @@ const PaymentDistributionCard = ({
 
   const radius = 30;
   const circumference = 2 * Math.PI * radius;
+
+  // 2. Proteção contra variáveis indefinidas na hora da divisão
+  const countGen = data.countGenerated || 0;
+  const countPaid = data.countPaid || 0;
+
   const generalConversion =
-    data.countGenerated > 0
-      ? Math.round((data.countPaid / data.countGenerated) * 100)
-      : 0;
+    countGen > 0 ? Math.round((countPaid / countGen) * 100) : 0;
 
   const blurClass = !isValuesVisible
     ? "blur-[4px] opacity-50 select-none transition-all duration-300"
@@ -275,7 +326,10 @@ const PaymentDistributionCard = ({
                 strokeWidth="6"
                 fill="transparent"
                 strokeDasharray={`${(boletoPercent / 100) * circumference} ${circumference}`}
-                strokeDashoffset={-1 * (pixPercent / 100) * circumference - (cardPercent / 100) * circumference}
+                strokeDashoffset={
+                  -1 * (pixPercent / 100) * circumference -
+                  (cardPercent / 100) * circumference
+                }
                 className="transition-all duration-1000"
               />
             </svg>
@@ -381,7 +435,7 @@ const PaymentDistributionCard = ({
 // ==========================================
 // 3. EXPORTAÇÃO PRINCIPAL
 // ==========================================
-export function PaymentConversion({ data }: { data: Record<string, any> }) {
+export function PaymentConversion({ data }: { data: FinanceData }) {
   const { isValuesVisible } = useDashboard();
 
   const f = (val: number) =>
@@ -450,7 +504,7 @@ export function PaymentConversion({ data }: { data: Record<string, any> }) {
       {/* 3. Pix */}
       <ConversionCard
         title="Pix"
-        icon={<Banknote size={18} />}
+        icon={<PixIcon size={18} />}
         color="bg-blue-600"
         ringColor="#10b981"
         isValuesVisible={isValuesVisible}

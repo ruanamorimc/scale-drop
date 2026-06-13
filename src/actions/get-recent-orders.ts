@@ -3,12 +3,15 @@
 import prisma from "@/lib/prisma";
 import { Order } from "@/app/(private)/orders/columns";
 
-export async function getRecentOrders(): Promise<Order[]> {
+// 🔥 1. Adicionamos o parâmetro productId (opcional)
+export async function getRecentOrders(
+  from?: Date,
+  to?: Date,
+  productId?: string,
+): Promise<Order[]> {
   try {
-    // 1. Busca as regras de impostos dinâmicos do banco
     const taxesConfig = await prisma.tax.findMany();
 
-    // Busca o Simples Nacional (Sobre Faturamento)
     const revenueTaxConfig = taxesConfig.find(
       (t) => t.calculationRule === "Sobre Faturamento",
     );
@@ -16,15 +19,33 @@ export async function getRecentOrders(): Promise<Order[]> {
       ? Number(revenueTaxConfig.rate) / 100
       : 0;
 
-    // Busca o imposto do Meta (Ad Spend)
     const metaTaxConfig = taxesConfig.find(
       (t) => t.calculationRule === "Ad Spend" || t.name.includes("Meta"),
     );
     const metaTaxRate = metaTaxConfig ? Number(metaTaxConfig.rate) / 100 : 0;
 
-    // 2. Busca os pedidos incluindo Produtos para o CMV
+    // 🔥 2. Instruímos o Prisma a filtrar pelo produto caso exista!
     const orders = await prisma.order.findMany({
-      take: 5,
+      where: {
+        ...(from || to
+          ? {
+              createdAt: {
+                ...(from && { gte: from }),
+                ...(to && { lte: to }),
+              },
+            }
+          : {}),
+        // Se houver um productId, busca pedidos cujos items contenham esse produto
+        ...(productId
+          ? {
+              items: {
+                some: {
+                  productId: productId,
+                },
+              },
+            }
+          : {}),
+      },
       orderBy: { createdAt: "desc" },
       include: {
         items: {
@@ -34,100 +55,96 @@ export async function getRecentOrders(): Promise<Order[]> {
     });
 
     const formattedOrders: Order[] = orders.map((order) => {
-      // ==========================================
-      // 1. FATURAMENTO
-      // ==========================================
       const totalAmount = Number(order.total) || 0;
 
-      // ==========================================
-      // 2. CMV (CUSTO DO PRODUTO)
-      // ==========================================
-      const totalCmv = order.items.reduce((acc, item) => {
-        const unitCost = Number(item.product?.costPrice) || 0;
-        return acc + unitCost * item.quantity;
-      }, 0);
+      const totalCmv =
+        order.items?.reduce((acc, item) => {
+          const unitCost = Number(item.product?.costPrice) || 0;
+          return acc + unitCost * Number(item.quantity);
+        }, 0) || 0;
 
-      // ==========================================
-      // 3. TAXAS DE GATEWAY (Com Fallback)
-      // ==========================================
-      // Lemos a coluna oficial que criamos no schema
       let gatewayFee = Number(order.gatewayFee) || 0;
-
-      // Se o webhook da plataforma não enviou a taxa (veio 0), aplicamos a margem de segurança.
-      // Exemplo: 4.99% do pedido + R$ 1,00 fixo. (Ajuste esses valores para a sua realidade)
       if (gatewayFee === 0) {
         gatewayFee = totalAmount * 0.0499 + 1.0;
       }
 
-      // ==========================================
-      // 4. CUSTO DE MARKETING (META ADS)
-      // ==========================================
       const marketingCost = Number(order.marketingCost) || 0;
-
-      // ==========================================
-      // 5. CÁLCULO INTELIGENTE DE IMPOSTOS
-      // ==========================================
       const taxOnRevenue = totalAmount * revenueTaxRate;
-
-      // MÁGICA AQUI: Se marketingCost for 0, (0 * 12%) = 0.
-      // O imposto do Meta SÓ é cobrado se o pedido teve Ad Spend!
       const taxOnAdSpend = marketingCost * metaTaxRate;
-
       const totalTaxes = taxOnRevenue + taxOnAdSpend;
 
-      // ==========================================
-      // 6. LUCRO LÍQUIDO FINAL
-      // ==========================================
       const totalDeductions =
         totalCmv + gatewayFee + totalTaxes + marketingCost;
       const netProfit = totalAmount - totalDeductions;
 
-      // --- RETORNO PERFEITO PARA A COLUNA DA TABELA ---
+      const orderDate = new Date(order.createdAt);
+      const dateFormatted = new Intl.DateTimeFormat("pt-BR").format(orderDate);
+      const timeFormatted = new Intl.DateTimeFormat("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit",
+      }).format(orderDate);
+
+      const rawPaymentMethod = (order.paymentMethod || "").toLowerCase();
+      let displayMethod: "Cartão de Crédito" | "Pix" | "Boleto" =
+        "Cartão de Crédito";
+
+      if (rawPaymentMethod.includes("pix")) {
+        displayMethod = "Pix";
+      } else if (
+        rawPaymentMethod.includes("boleto") ||
+        rawPaymentMethod.includes("billet")
+      ) {
+        displayMethod = "Boleto";
+      }
+
+      const rawPaymentStatus = order.paymentStatus?.toLowerCase() || "pending";
+      const finalPaymentStatus =
+        rawPaymentStatus === "failed" ? "cancelled" : rawPaymentStatus;
+      const rawOrderStatus = order.status?.toLowerCase() || "pending";
+
       return {
         id: order.id,
         invoiceId: order.orderNumber
           ? String(order.orderNumber)
           : `INV-${order.id.slice(0, 4).toUpperCase()}`,
-
         customer: {
           name: order.customerName || "Cliente Desconhecido",
           email: order.customerEmail || "sem@email.com",
           avatar: "",
         },
+        date: dateFormatted,
+        time: timeFormatted,
 
-        date: new Intl.DateTimeFormat("pt-BR", {
-          day: "2-digit",
-          month: "short",
-          year: "numeric",
-        }).format(new Date(order.createdAt)),
+        paymentStatus: finalPaymentStatus as
+          | "paid"
+          | "pending"
+          | "cancelled"
+          | "refunded",
+        paymentMethod: displayMethod,
 
-        time: new Intl.DateTimeFormat("pt-BR", {
-          hour: "2-digit",
-          minute: "2-digit",
-        }).format(new Date(order.createdAt)),
-
-        paymentStatus: order.paymentStatus
-          ? String(order.paymentStatus).toLowerCase()
-          : "pending",
-        paymentMethod: order.paymentMethod
-          ? String(order.paymentMethod)
-          : "credit_card",
-        status: order.status ? String(order.status).toLowerCase() : "pending",
-
-        // Mapeia os itens corretamente para satisfazer o Type da tabela
-        items: order.items.map((item) => ({
-          name: item.name || "Produto",
-          price: Number(item.unitPrice) || 0,
-          image: item.product?.images?.[0] || "",
-          quantity: item.quantity || 1,
-        })),
-
-        // Valores Financeiros
         amount: totalAmount,
         cmv: totalCmv,
         tax: totalTaxes + gatewayFee,
         marketing: marketingCost,
         netProfit: netProfit,
+
+        status: rawOrderStatus as
+          | "pending"
+          | "processing"
+          | "confirmed"
+          | "preparing"
+          | "shipped"
+          | "delivered"
+          | "cancelled"
+          | "returned",
+
+        items:
+          order.items?.map((item) => ({
+            name: item.name || "Produto",
+            price: Number(item.unitPrice) || 0,
+            image: item.product?.images?.[0] || "",
+            quantity: item.quantity || 1,
+          })) || [],
       } as Order;
     });
 

@@ -9,44 +9,39 @@ import {
   subDays,
   differenceInDays,
   getHours,
+  addDays,
+  addMonths,
+  startOfMonth,
+  format,
 } from "date-fns";
 
-// ============================================================================
-// 1. FUNÇÃO PRINCIPAL: GET FINANCE METRICS (Exportada para a Dashboard)
-// Responsável por orquestrar a busca de dados atuais, passados e calcular as tendências.
-// ============================================================================
-export async function getFinanceMetrics(from?: Date, to?: Date) {
-  // 1.1 - Autenticação de Segurança (Garante que só o dono da loja veja isso)
+export async function getFinanceMetrics(
+  from?: Date,
+  to?: Date,
+  productId?: string,
+) {
   const session = await auth.api.getSession({ headers: await headers() });
   if (!session?.user?.id) return null;
   const userId = session.user.id;
 
-  // 1.2 - Cálculo de Períodos (Para comparar o "Hoje" com o "Ontem" ou "Mês Passado")
-  const startDate = from || new Date // Padrão para hoje
+  const startDate = from || new Date();
   const endDate = to || new Date();
-
-  // Diferença entre dias (Se for o mesmo dia será 0)
   const daysDiff = differenceInDays(endDate, startDate);
 
-  // Calcula o período exatamente igual, mas no passado, para a % de crescimento
   const prevEndDate = subDays(startDate, 1);
   const prevStartDate = subDays(prevEndDate, daysDiff);
 
   try {
-    // 1.3 - Busca Paralela (Alta performance: busca o atual e o passado ao mesmo tempo)
     const [currentData, prevData] = await Promise.all([
-      fetchPeriodData(userId, startDate, endDate),
-      fetchPeriodData(userId, prevStartDate, prevEndDate),
+      fetchPeriodData(userId, startDate, endDate, productId),
+      fetchPeriodData(userId, prevStartDate, prevEndDate, productId),
     ]);
 
-    // 1.4 - Função Matemática de Tendência (Ex: Cresceu 20% ou Caiu 10%)
     const calcTrend = (curr: number, prev: number) => {
-      // Se não tinha vendas antes e agora tem, cresceu 100%
       if (prev === 0) return curr > 0 ? 100 : 0;
       return ((curr - prev) / prev) * 100;
     };
 
-    // 1.5 - Cálculo de CAC (Custo de Aquisição por Cliente)
     const currCPA =
       currentData.countPaid > 0
         ? currentData.adSpend / currentData.countPaid
@@ -54,7 +49,6 @@ export async function getFinanceMetrics(from?: Date, to?: Date) {
     const prevCPA =
       prevData.countPaid > 0 ? prevData.adSpend / prevData.countPaid : 0;
 
-    // 1.6 - Montagem do Objeto de Tendências (% que aparece nos Cards)
     const trends = {
       revenue: calcTrend(currentData.totalPaid, prevData.totalPaid),
       profit: calcTrend(currentData.netProfit, prevData.netProfit),
@@ -68,7 +62,6 @@ export async function getFinanceMetrics(from?: Date, to?: Date) {
       cac: calcTrend(currCPA, prevCPA),
     };
 
-    // Retorna todos os dados atuais + as porcentagens de crescimento
     return { ...currentData, trends };
   } catch (error) {
     console.error("❌ Erro Crítico na Action Finance:", error);
@@ -76,45 +69,39 @@ export async function getFinanceMetrics(from?: Date, to?: Date) {
   }
 }
 
-// ============================================================================
-// 2. MOTOR DE CÁLCULO: FETCH PERIOD DATA
-// O "Coração" do sistema. Vai no banco, varre todos os pedidos e faz a matemática.
-// ============================================================================
-async function fetchPeriodData(userId: string, start: Date, end: Date) {
-  // 2.1 - Consulta no Banco de Dados (Tudo em Paralelo para ser Rápido)
+async function fetchPeriodData(
+  userId: string,
+  start: Date,
+  end: Date,
+  productId?: string,
+) {
   const [orders, fees, taxes, fixedExpenses, integrations, userData] =
     await Promise.all([
-      // Puxa os Pedidos com seus Itens
       prisma.order.findMany({
         where: {
           userId,
           createdAt: { gte: startOfDay(start), lte: endOfDay(end) },
+          ...(productId ? { items: { some: { productId } } } : {}),
         },
         include: { items: true },
       }),
-      // Puxa as Taxas de Gateway (Ex: 5% da Appmax)
       prisma.fee.findMany({ where: { userId } }),
-      // Puxa Impostos (Ex: 6% de Simples Nacional)
       prisma.tax.findMany({ where: { userId } }),
-      // Puxa Custos Fixos (Ex: Mensalidade Shopify, Contabilidade)
       prisma.fixedExpense.findMany({
         where: { userId, date: { gte: startOfDay(start), lte: endOfDay(end) } },
         orderBy: { date: "desc" },
       }),
-      // Puxa Lojas Conectadas (Yampi, Shopify)
       prisma.storeIntegration.findMany({ where: { userId } }),
-      // Puxa o Token da Meta no perfil do usuário
       prisma.user.findUnique({
         where: { id: userId },
         select: { metaAccessToken: true },
       }),
     ]);
 
-  // 2.2 - Inicialização das Variáveis Acumuladoras
   let totalPaid = 0;
   let countPaid = 0;
   let totalGenerated = 0;
-  let countGenerated = orders.length;
+  const countGenerated = orders.length;
   let totalPending = 0;
   let countPending = 0;
   let totalCostOfGoods = 0;
@@ -123,7 +110,6 @@ async function fetchPeriodData(userId: string, start: Date, end: Date) {
   let abandonedCount = 0;
   let abandonedValue = 0;
 
-  // Organiza pagamentos por método (Cartão, Pix, Boleto)
   const metrics = {
     card: {
       paid: 0,
@@ -151,7 +137,9 @@ async function fetchPeriodData(userId: string, start: Date, end: Date) {
     },
   };
 
-  // Prepara o Gráfico de 24h
+  // ==========================================
+  // INICIALIZAÇÃO DOS 5 MAPAS DE GRÁFICO
+  // ==========================================
   const chartData = Array.from({ length: 24 }, (_, i) => ({
     name: `${i}h`,
     revenue: 0,
@@ -161,22 +149,251 @@ async function fetchPeriodData(userId: string, start: Date, end: Date) {
     productcost: 0,
   }));
 
+  const totalDays = differenceInDays(endOfDay(end), startOfDay(start)) + 1;
+  const isMonthly = totalDays > 31;
+  const timelineMap = new Map();
+
+  if (isMonthly) {
+    let currentMonth = startOfMonth(start);
+    while (currentMonth <= endOfDay(end)) {
+      const dateKey = format(currentMonth, "yyyy-MM");
+      timelineMap.set(dateKey, {
+        name: format(currentMonth, "MM/yyyy"),
+        revenue: 0,
+        profit: 0,
+        tax: 0,
+        marketing: 0,
+        productcost: 0,
+      });
+      currentMonth = addMonths(currentMonth, 1);
+    }
+  } else {
+    for (let i = 0; i < totalDays; i++) {
+      const currentDay = addDays(startOfDay(start), i);
+      const dateKey = format(currentDay, "yyyy-MM-dd");
+      timelineMap.set(dateKey, {
+        name: format(currentDay, "dd/MM"),
+        revenue: 0,
+        profit: 0,
+        tax: 0,
+        marketing: 0,
+        productcost: 0,
+      });
+    }
+  }
+
+  const turnoMap = new Map([
+    [
+      "Manhã",
+      {
+        name: "Manhã",
+        revenue: 0,
+        profit: 0,
+        tax: 0,
+        marketing: 0,
+        productcost: 0,
+      },
+    ],
+    [
+      "Tarde",
+      {
+        name: "Tarde",
+        revenue: 0,
+        profit: 0,
+        tax: 0,
+        marketing: 0,
+        productcost: 0,
+      },
+    ],
+    [
+      "Noite",
+      {
+        name: "Noite",
+        revenue: 0,
+        profit: 0,
+        tax: 0,
+        marketing: 0,
+        productcost: 0,
+      },
+    ],
+    [
+      "Madrugada",
+      {
+        name: "Madrugada",
+        revenue: 0,
+        profit: 0,
+        tax: 0,
+        marketing: 0,
+        productcost: 0,
+      },
+    ],
+  ]);
+
+  const weekMap = new Map([
+    [
+      "Dom",
+      {
+        name: "Dom",
+        revenue: 0,
+        profit: 0,
+        tax: 0,
+        marketing: 0,
+        productcost: 0,
+      },
+    ],
+    [
+      "Seg",
+      {
+        name: "Seg",
+        revenue: 0,
+        profit: 0,
+        tax: 0,
+        marketing: 0,
+        productcost: 0,
+      },
+    ],
+    [
+      "Ter",
+      {
+        name: "Ter",
+        revenue: 0,
+        profit: 0,
+        tax: 0,
+        marketing: 0,
+        productcost: 0,
+      },
+    ],
+    [
+      "Qua",
+      {
+        name: "Qua",
+        revenue: 0,
+        profit: 0,
+        tax: 0,
+        marketing: 0,
+        productcost: 0,
+      },
+    ],
+    [
+      "Qui",
+      {
+        name: "Qui",
+        revenue: 0,
+        profit: 0,
+        tax: 0,
+        marketing: 0,
+        productcost: 0,
+      },
+    ],
+    [
+      "Sex",
+      {
+        name: "Sex",
+        revenue: 0,
+        profit: 0,
+        tax: 0,
+        marketing: 0,
+        productcost: 0,
+      },
+    ],
+    [
+      "Sáb",
+      {
+        name: "Sáb",
+        revenue: 0,
+        profit: 0,
+        tax: 0,
+        marketing: 0,
+        productcost: 0,
+      },
+    ],
+  ]);
+
+  const regionMap = new Map([
+    [
+      "Sul",
+      {
+        name: "Sul",
+        revenue: 0,
+        profit: 0,
+        tax: 0,
+        marketing: 0,
+        productcost: 0,
+      },
+    ],
+    [
+      "Sudeste",
+      {
+        name: "Sudeste",
+        revenue: 0,
+        profit: 0,
+        tax: 0,
+        marketing: 0,
+        productcost: 0,
+      },
+    ],
+    [
+      "Centro-Oeste",
+      {
+        name: "Centro-Oeste",
+        revenue: 0,
+        profit: 0,
+        tax: 0,
+        marketing: 0,
+        productcost: 0,
+      },
+    ],
+    [
+      "Nordeste",
+      {
+        name: "Nordeste",
+        revenue: 0,
+        profit: 0,
+        tax: 0,
+        marketing: 0,
+        productcost: 0,
+      },
+    ],
+    [
+      "Norte",
+      {
+        name: "Norte",
+        revenue: 0,
+        profit: 0,
+        tax: 0,
+        marketing: 0,
+        productcost: 0,
+      },
+    ],
+    [
+      "Outros",
+      {
+        name: "Outros",
+        revenue: 0,
+        profit: 0,
+        tax: 0,
+        marketing: 0,
+        productcost: 0,
+      },
+    ],
+  ]);
+
   const productMap = new Map();
 
-  // 2.3 - O GRANDE LOOP DE PEDIDOS (Processa cada venda)
   for (const order of orders) {
     const orderTotal = Number(order.total || 0);
     totalGenerated += orderTotal;
     const status = (order.status || "").toUpperCase();
 
-    // Identifica Forma de Pagamento
-    const methodRaw =
-      (order as any).paymentMethod?.toLowerCase() || "credit_card";
+    const methodRaw = String(
+      order.paymentMethod || "credit_card",
+    ).toLowerCase();
     let methodType: "card" | "pix" | "boleto" = "card";
-    if (methodRaw.includes("pix")) methodType = "pix";
-    else if (methodRaw.includes("boleto")) methodType = "boleto";
 
-    // Agrupa Status
+    if (methodRaw.includes("pix")) methodType = "pix";
+    else if (methodRaw.includes("boleto") || methodRaw.includes("billet"))
+      methodType = "boleto";
+
     const isPaid = [
       "PAID",
       "CONFIRMED",
@@ -200,85 +417,149 @@ async function fetchPeriodData(userId: string, start: Date, end: Date) {
       abandonedValue += orderTotal;
     }
 
-    // === SE O PEDIDO FOI PAGO ===
     if (isPaid) {
       totalPaid += orderTotal;
       countPaid++;
       metrics[methodType].paid += orderTotal;
       metrics[methodType].paidCount++;
 
-      // Calcula o custo dos produtos vendidos no pedido
       let orderCost = 0;
       if (order.items && Array.isArray(order.items)) {
-        order.items.forEach((item: any) => {
-          const cost = Number(item.costPrice || 0) * item.quantity;
+        order.items.forEach((item) => {
+          const rawCost = (item as { costPrice?: number | string | null })
+            .costPrice;
+          const cost = Number(rawCost || 0) * Number(item.quantity || 1);
+
           orderCost += cost;
           totalCostOfGoods += cost;
 
-          // Guarda produto para o ranking de Mais Vendidos
           const prodName = item.name || "Item";
           const current = productMap.get(prodName) || {
             name: prodName,
             sales: 0,
             revenue: 0,
           };
-          current.sales += item.quantity;
-          current.revenue += Number(item.price || 0) * item.quantity;
+          current.sales += Number(item.quantity || 1);
+
+          const rawPrice = item.unitPrice;
+          current.revenue += Number(rawPrice || 0) * Number(item.quantity || 1);
+
           productMap.set(prodName, current);
         });
       }
 
-      // Calcula Taxas do Gateway para este pedido
       let orderFees = 0;
       fees.forEach((fee) => {
-        if (fee.type === "PERCENTAGE")
+        if (fee.type === "PERCENTAGE") {
           orderFees += orderTotal * (Number(fee.value) / 100);
-        else orderFees += Number(fee.value);
+        } else {
+          orderFees += Number(fee.value);
+        }
       });
       totalGatewayFees += orderFees;
 
-      // Calcula Impostos para este pedido
       let orderTax = 0;
       taxes.forEach((tax) => {
-        if (!tax.calculationRule || tax.calculationRule === "faturamento")
+        if (tax.calculationRule === "faturamento") {
           orderTax += orderTotal * (Number(tax.rate) / 100);
+        }
       });
       totalTaxAmount += orderTax;
 
-      // Alimenta o Gráfico de 24h
-      const hour = getHours(order.createdAt);
+      const currentProfit = orderTotal - orderCost - orderTax - orderFees;
+      const orderDate = new Date(order.createdAt);
+      const hour = orderDate.getHours();
+
+      // 1. Array de 24h
       if (chartData[hour]) {
         chartData[hour].revenue += orderTotal;
-        chartData[hour].productcost += orderCost;
+        chartData[hour].productcost += orderCost; // Corrigido C minúsculo
         chartData[hour].tax += orderTax;
-        chartData[hour].profit += orderTotal - orderCost - orderTax - orderFees;
+        chartData[hour].profit += currentProfit;
       }
 
-      // === SE O PEDIDO ESTÁ PENDENTE (Pix gerado, aguardando pgto) ===
+      // 2. Array da Timeline
+      const dateKey = isMonthly
+        ? format(orderDate, "yyyy-MM")
+        : format(orderDate, "yyyy-MM-dd");
+      if (timelineMap.has(dateKey)) {
+        const dayData = timelineMap.get(dateKey);
+        dayData.revenue += orderTotal;
+        dayData.productcost += orderCost; // Corrigido C minúsculo
+        dayData.tax += orderTax;
+        dayData.profit += currentProfit;
+      }
+
+      // 🔥 3. Array do Turno
+      let turno = "Madrugada";
+      if (hour >= 6 && hour < 12) turno = "Manhã";
+      else if (hour >= 12 && hour < 18) turno = "Tarde";
+      else if (hour >= 18 && hour <= 23) turno = "Noite";
+
+      const tData = turnoMap.get(turno)!;
+      tData.revenue += orderTotal;
+      tData.productcost += orderCost; // Corrigido C minúsculo
+      tData.tax += orderTax;
+      tData.profit += currentProfit;
+
+      // 🔥 4. Array da Semana
+      const dayNames = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
+      const wData = weekMap.get(dayNames[orderDate.getDay()])!;
+      wData.revenue += orderTotal;
+      wData.productcost += orderCost; // Corrigido C minúsculo
+      wData.tax += orderTax;
+      wData.profit += currentProfit;
+
+      // 🔥 5. Array de Região (Mapeando a UF)
+      // Fim do erro de 'any': Ensinamos o TypeScript a esperar essas propriedades de forma segura
+      const safeOrder = order as unknown as {
+        customerState?: string | null;
+        state?: string | null;
+        shippingState?: string | null;
+      };
+
+      const uf = String(
+        safeOrder.customerState ||
+          safeOrder.state ||
+          safeOrder.shippingState ||
+          "",
+      ).toUpperCase();
+
+      let region = "Outros";
+      if (["PR", "RS", "SC"].includes(uf)) region = "Sul";
+      else if (["ES", "MG", "RJ", "SP"].includes(uf)) region = "Sudeste";
+      else if (["DF", "GO", "MT", "MS"].includes(uf)) region = "Centro-Oeste";
+      else if (
+        ["AL", "BA", "CE", "MA", "PB", "PE", "PI", "RN", "SE"].includes(uf)
+      )
+        region = "Nordeste";
+      else if (["AC", "AP", "AM", "PA", "RO", "RR", "TO"].includes(uf))
+        region = "Norte";
+
+      const rData = regionMap.get(region);
+      if (rData) {
+        rData.revenue += orderTotal;
+        rData.productcost += orderCost; // Corrigido C minúsculo
+        rData.tax += orderTax;
+        rData.profit += currentProfit;
+      }
     } else if (isPending) {
       totalPending += orderTotal;
       countPending++;
       metrics[methodType].pending += orderTotal;
       metrics[methodType].pendingCount++;
-
-      // === SE O PEDIDO FOI RECUSADO ===
     } else if (isRefused) {
       metrics[methodType].refused += orderTotal;
       metrics[methodType].refusedCount++;
     }
   }
 
-  // 2.4 - FECHAMENTO DE CONTAS DO MÊS
-  // Soma Despesas Fixas
   let totalFixedExpenses = 0;
-  fixedExpenses.forEach(
-    (exp) => (totalFixedExpenses += Number(exp.amount || 0)),
-  );
+  fixedExpenses.forEach((exp) => {
+    totalFixedExpenses += Number(exp.amount || 0);
+  });
 
-  // Anúncios (Atualmente zerado, será alimentado pela API do Facebook futuramente)
   const adSpend = 0;
-
-  // Fórmulas Vitais
   const totalExpenses =
     totalCostOfGoods +
     totalGatewayFees +
@@ -287,20 +568,16 @@ async function fetchPeriodData(userId: string, start: Date, end: Date) {
     totalFixedExpenses;
   const netProfit = totalPaid - totalExpenses;
 
-  // Margem e ROI (Proteção contra divisão por zero)
   const margin = totalPaid > 0 ? (netProfit / totalPaid) * 100 : 0;
   const roi = totalExpenses > 0 ? (netProfit / totalExpenses) * 100 : 0;
   const ticketAverage = countPaid > 0 ? totalPaid / countPaid : 0;
 
-  // Top 4 Produtos Mais Vendidos
   const topProducts = Array.from(productMap.values())
     .sort((a, b) => b.sales - a.sales)
     .slice(0, 4);
 
-  // 2.5 - VERIFICAÇÃO DE INTEGRAÇÕES DE MARKETING ATIVAS
-  // Busca na tabela de StoreIntegration e filtra
   const rawAdPlatforms = integrations
-    .map((int) => int.platform?.toLowerCase() || "")
+    .map((int) => (int.platform || "").toLowerCase())
     .filter(
       (p) =>
         p.includes("facebook") ||
@@ -315,15 +592,8 @@ async function fetchPeriodData(userId: string, start: Date, end: Date) {
       return p;
     });
 
-  // Busca na Tabela de User pelo Token
-  if (userData?.metaAccessToken) {
-    rawAdPlatforms.push("facebook");
-  }
+  if (userData?.metaAccessToken) rawAdPlatforms.push("facebook");
 
-  // Remove duplicatas (Evita mostrar o logo do Face duas vezes)
-  const activeAdPlatforms = Array.from(new Set(rawAdPlatforms));
-
-  // 2.6 - RETORNO MASSIVO DE DADOS PARA A TELA
   return {
     totalPaid,
     countPaid,
@@ -349,6 +619,12 @@ async function fetchPeriodData(userId: string, start: Date, end: Date) {
     })),
     metrics,
     chartData,
+    timelineData: Array.from(timelineMap.values()),
+    turnoData: Array.from(turnoMap.values()),
+    weekData: Array.from(weekMap.values()),
+    regionData: Array.from(regionMap.values()).filter(
+      (r) => r.revenue > 0 || r.name !== "Outros",
+    ),
     topProducts,
     cardPaidValue: metrics.card.paid,
     cardPaidCount: metrics.card.paidCount,
@@ -356,6 +632,6 @@ async function fetchPeriodData(userId: string, start: Date, end: Date) {
     pixPaidCount: metrics.pix.paidCount,
     boletoPaidValue: metrics.boleto.paid,
     boletoPaidCount: metrics.boleto.paidCount,
-    activeAdPlatforms, // Usado pelo Card de Marketing para mostrar os Ícones (Meta/Google/TikTok)
+    activeAdPlatforms: Array.from(new Set(rawAdPlatforms)),
   };
 }

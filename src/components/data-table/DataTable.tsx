@@ -36,7 +36,8 @@ interface DataTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
   pageSize?: number;
-  meta?: any;
+  // 1. CORREÇÃO DO ANY: Usamos Record<string, unknown> para segurança
+  meta?: Record<string, unknown>;
   onRowClick?: (row: TData) => void;
   toolbar?: (table: TanstackTable<TData>) => React.ReactNode;
   hidePagination?: boolean;
@@ -68,6 +69,21 @@ export function DataTable<TData, TValue>({
   const [rowSelection, setRowSelection] = useState({});
   const [columnResizeMode] = useState<ColumnResizeMode>("onChange");
 
+  // ==========================================
+  // 2. A MÁGICA DO LOCALSTORAGE PARA A PAGINAÇÃO
+  // ==========================================
+  const [pagination, setPagination] = useState(() => {
+    if (typeof window !== "undefined") {
+      const savedSize = localStorage.getItem("tabela_pedidos_pageSize");
+      return {
+        pageIndex: 0,
+        pageSize: savedSize ? Number(savedSize) : pageSize,
+      };
+    }
+    return { pageIndex: 0, pageSize };
+  });
+
+  // 3. CORREÇÃO DO AVISO AMARELO: Avisamos o linter para pular essa checagem específica
   const table = useReactTable({
     data,
     columns,
@@ -84,17 +100,31 @@ export function DataTable<TData, TValue>({
       minSize: 50,
       maxSize: 800,
     },
+    // 🔥 Adicionamos os controles de paginação dinâmicos aqui
     state: {
       sorting,
       columnVisibility,
       rowSelection,
+      pagination, // Estado da paginação entra aqui
     },
-    meta: meta,
-    initialState: {
-      pagination: {
-        pageSize: pageSize,
-      },
+    meta, // Meta seguro inserido aqui
+
+    // Função que escuta quando o usuário muda de 10 para 50, etc.
+    onPaginationChange: (updater) => {
+      setPagination((prev) => {
+        const next = typeof updater === "function" ? updater(prev) : updater;
+        // Salva imediatamente no navegador
+        if (typeof window !== "undefined") {
+          localStorage.setItem(
+            "tabela_pedidos_pageSize",
+            String(next.pageSize),
+          );
+        }
+        return next;
+      });
     },
+    // ⚠️ ATENÇÃO: Apague a propriedade "initialState" antiga que tinha o pageSize lá embaixo,
+    // pois agora o objeto 'state' acima já controla isso!
   });
 
   useEffect(() => {
