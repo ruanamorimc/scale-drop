@@ -30,6 +30,7 @@ export function LoginForm({
   ...props
 }: React.ComponentProps<"form">) {
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   const form = useForm<LoginFormValues>({
@@ -43,9 +44,10 @@ export function LoginForm({
 
   async function onSubmit(values: LoginFormValues) {
     setError(null);
+    setLoading(true);
 
     // O authClient já lida com o estado de loading interno, mas podemos usar o do form
-    const { error } = await authClient.signIn.email(
+    await authClient.signIn.email(
       {
         email: values.email,
         password: values.password,
@@ -54,10 +56,12 @@ export function LoginForm({
       },
       {
         onSuccess: () => {
+          setLoading(false);
           toast.success("Login realizado com sucesso!");
           router.replace("/dashboard");
         },
         onError: (ctx) => {
+          setLoading(false);
           console.log("ERRO AO LOGAR", ctx);
           setError(ctx.error.message || "Email ou senha incorretos.");
         },
@@ -67,6 +71,7 @@ export function LoginForm({
 
   async function handleSocialSignIn(provider: "google") {
     setError(null);
+    setLoading(true);
 
     const { error } = await authClient.signIn.social({
       provider,
@@ -164,8 +169,8 @@ export function LoginForm({
         )}
 
         <Field>
-          <Button type="submit" disabled={form.formState.isSubmitting}>
-            {form.formState.isSubmitting ? "Entrando..." : "Login"}
+          <Button type="submit" disabled={loading}>
+            {loading ? "Entrando..." : "Login"}
           </Button>
         </Field>
 
@@ -176,6 +181,7 @@ export function LoginForm({
             variant="outline"
             type="button"
             onClick={() => handleSocialSignIn("google")}
+            disabled={loading}
           >
             {/* Ícone do Google omitido */}
             <svg
@@ -188,7 +194,7 @@ export function LoginForm({
                 fill="currentColor"
               />
             </svg>
-            Login com Google
+            {loading ? "Redirecionando..." : "Entrar com Google"}
           </Button>
           <FieldDescription className="text-center">
             Não tem uma conta?{" "}

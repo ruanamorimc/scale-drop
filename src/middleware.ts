@@ -44,12 +44,12 @@ export async function middleware(request: NextRequest) {
     nextUrl.pathname.startsWith("/auth") ||
     nextUrl.pathname === "/login" ||
     nextUrl.pathname === "/sign-up";
-  const isPricingRoute = nextUrl.pathname.startsWith("/pricing");
+  const isPricingRoute = nextUrl.pathname.startsWith("/planos");
 
   // A. Se não está logado e tenta acessar área privada -> Manda pro Login
   if (isDashboardRoute && !isAuthenticated) {
     // Redireciona para o login padrão
-    return NextResponse.redirect(new URL("/auth/sign-in", request.url));
+    return NextResponse.redirect(new URL("/login", request.url));
   }
 
   // B. Se já está logado, mas tenta acessar página de login -> Manda pro Dashboard
@@ -62,9 +62,8 @@ export async function middleware(request: NextRequest) {
     // Baseado no seu print image_15497d.png
     // Verifique se o campo no seu banco chama 'accessStatus' ou 'planStatus'
     // Estou mantendo 'accessStatus' conforme seu print.
-    if (user?.accessStatus !== "ACTIVE") {
-      // Se não pagou, redireciona para a página de vendas
-      return NextResponse.redirect(new URL("/pricing", request.url));
+    if (user?.accessStatus !== "ACTIVE" && !isPricingRoute) {
+      return NextResponse.redirect(new URL("/planos", request.url));
     }
   }
 
@@ -80,6 +79,6 @@ export const config = {
     "/auth/:path*",
     "/login",
     "/sign-up",
-    "/pricing", // Importante incluir pricing para não dar loop infinito se precisar tratar algo lá
+    "/planos", // Importante incluir pricing para não dar loop infinito se precisar tratar algo lá
   ],
 };

@@ -138,7 +138,7 @@ export function Header() {
             Login
           </Link>
           <Link
-            href="/register"
+            href="/sign-up"
             className="group relative overflow-hidden px-5 py-2 rounded-lg border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 shadow-lg hover:shadow-2xl hover:shadow-blue-500/40 hover:scale-105 active:scale-95 transition-all duration-300 ease-out hover:border-blue-400 flex items-center justify-center"
           >
             {/* Efeito de Varredura de Luz */}

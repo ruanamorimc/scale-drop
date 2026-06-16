@@ -28,6 +28,7 @@ export function SignUpForm({
   ...props
 }: React.ComponentProps<"form">) {
   const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(false);
   const router = useRouter();
 
   const form = useForm<SignUpFormValues>({
@@ -43,13 +44,13 @@ export function SignUpForm({
 
   async function onSubmit(values: SignUpFormValues) {
     setError(null);
+    setLoading(true);
 
-    const { data, error } = await authClient.signUp.email(
+    await authClient.signUp.email(
       {
         email: values.email,
         password: values.password,
         name: values.name,
-        // 👇 Enviando o telefone (Mapeando 'phone' do form para 'phoneNumber' do Auth)
         phoneNumber: values.phone,
         callbackURL: "/email-verified",
       },
@@ -58,10 +59,12 @@ export function SignUpForm({
           // Opcional: mostrar loading global
         },
         onSuccess: () => {
+          setLoading(false);
           toast.success("Conta criada com sucesso!");
           router.replace("/dashboard");
         },
         onError: (ctx) => {
+          setLoading(false);
           console.log("ERRO AO CRIAR CONTA", ctx);
           setError(ctx.error.message || "Erro ao criar conta");
         },
@@ -70,6 +73,7 @@ export function SignUpForm({
   }
   async function handleSocialSignIn(provider: "google") {
     setError(null);
+    setLoading(true);
 
     const { error } = await authClient.signIn.social({
       provider,
@@ -191,8 +195,8 @@ export function SignUpForm({
         )}
 
         <Field>
-          <Button type="submit" disabled={form.formState.isSubmitting}>
-            {form.formState.isSubmitting ? "Criando..." : "Criar conta"}
+          <Button type="submit" disabled={loading}>
+            {loading ? "Criando conta..." : "Criar conta"}
           </Button>
         </Field>
 
@@ -203,6 +207,7 @@ export function SignUpForm({
             variant="outline"
             type="button"
             onClick={() => handleSocialSignIn("google")}
+            disabled={loading}
           >
             <svg
               xmlns="http://www.w3.org/2000/svg"
@@ -214,7 +219,7 @@ export function SignUpForm({
                 fill="currentColor"
               />
             </svg>
-            Cadastre-se com Google
+            {loading ? "Redirecionando..." : "Cadastre-se com Google"}
           </Button>
           <FieldDescription className="px-6 text-center">
             Já tem uma conta? <Link href="/login">Entrar</Link>
