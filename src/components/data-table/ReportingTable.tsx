@@ -21,7 +21,6 @@ import {
 } from "@/components/ui/table";
 import { cn } from "@/lib/utils";
 
-// ... (Interface ReportingTableProps mantida igual) ...
 interface ReportingTableProps<TData, TValue> {
   columns: ColumnDef<TData, TValue>[];
   data: TData[];
@@ -96,7 +95,6 @@ export function ReportingTable<TData, TValue>({
       )}
     >
       <div className="flex-1 w-full min-h-0 relative">
-        {/* CONTAINER DE SCROLL REAL */}
         <div className="absolute inset-0 overflow-auto custom-scrollbar">
           <Table
             style={{ width: enableResizing ? table.getTotalSize() : "100%" }}
@@ -104,8 +102,6 @@ export function ReportingTable<TData, TValue>({
               enableResizing ? "border-separate border-spacing-0" : "w-full",
             )}
           >
-            {/* HEADER STICKY */}
-            {/* z-20 garante que fique acima do corpo. sticky top-0 fixa no topo do container overflow-auto */}
             <TableHeader
               className={cn(
                 "sticky top-0 z-20 shadow-sm bg-card",
@@ -123,9 +119,9 @@ export function ReportingTable<TData, TValue>({
                       colSpan={header.colSpan}
                       style={{ width: header.getSize() }}
                       className={cn(
-                        "h-10 text-[11px] font-bold uppercase text-muted-foreground px-4 whitespace-nowrap bg-card", // bg-card é CRUCIAL
-                        "sticky top-0", // Fixa verticalmente
-                        "border-r border-border/40 last:border-r-0", // Linhas verticais
+                        "h-10 text-[11px] font-bold uppercase text-muted-foreground px-4 whitespace-nowrap bg-card",
+                        "sticky top-0",
+                        "border-r border-border/40 last:border-r-0",
                         classNames?.headerCell,
                       )}
                     >
@@ -156,6 +152,7 @@ export function ReportingTable<TData, TValue>({
                   <TableRow
                     key={row.id}
                     data-state={row.getIsSelected() && "selected"}
+                    // 🔥 HOVER DEVOLVIDO AQUI: Só aparece quando tem campanhas reais
                     className={cn(
                       "border-b border-border hover:bg-muted/50 transition-colors",
                       classNames?.row,
@@ -167,7 +164,7 @@ export function ReportingTable<TData, TValue>({
                         key={cell.id}
                         className={cn(
                           "py-3 px-4 text-[13px] whitespace-nowrap overflow-hidden text-ellipsis bg-background",
-                          "border-r border-border/30 last:border-r-0", // Linhas verticais
+                          "border-r border-border/30 last:border-r-0",
                           classNames?.cell,
                         )}
                         style={{ width: cell.column.getSize() }}
@@ -181,12 +178,13 @@ export function ReportingTable<TData, TValue>({
                   </TableRow>
                 ))
               ) : (
-                <TableRow>
+                // 🔥 HOVER REMOVIDO AQUI: Linha vazia completamente invisível
+                <TableRow className="hover:bg-transparent border-0">
                   <TableCell
                     colSpan={columns.length}
-                    className="h-24 text-center text-muted-foreground"
+                    className="h-24 text-center border-0"
                   >
-                    Sem resultados encontrados.
+                    {/* Esta área fica 100% vazia de propósito */}
                   </TableCell>
                 </TableRow>
               )}

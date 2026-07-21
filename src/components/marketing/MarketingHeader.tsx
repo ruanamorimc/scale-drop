@@ -1,6 +1,5 @@
 "use client";
 
-import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -18,9 +17,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-// Progress importado mas optamos pela div customizada para manter o gradiente
-import { Progress } from "@/components/ui/progress" 
-
 interface UserData {
   name: string;
   email: string;
@@ -48,20 +44,19 @@ export function MarketingHeader({
   onSave,
   onReset,
   hideControls,
-  currentRevenue = 0
+  currentRevenue = 0,
 }: MarketingHeaderProps) {
-
   // 1. Lógica de Metas (Dinâmica)
   const getNextMilestone = (revenue: number) => {
-    if (revenue < 10000) return 10000;       // Meta 10k
-    if (revenue < 100000) return 100000;     // Meta 100k
-    if (revenue < 500000) return 500000;     // Meta 500k
-    if (revenue < 1000000) return 1000000;   // Meta 1M
-    return 5000000;                          // Meta 5M
+    if (revenue < 10000) return 10000; // Meta 10k
+    if (revenue < 100000) return 100000; // Meta 100k
+    if (revenue < 500000) return 500000; // Meta 500k
+    if (revenue < 1000000) return 1000000; // Meta 1M
+    return 5000000; // Meta 5M
   };
 
   const nextGoal = getNextMilestone(currentRevenue);
-  
+
   // 2. Cálculo da Porcentagem (Limitada a 100%)
   const progressPercentage = Math.min((currentRevenue / nextGoal) * 100, 100);
 
@@ -69,7 +64,11 @@ export function MarketingHeader({
   const formatShortCurrency = (value: number) => {
     if (value >= 1000000) return `R$ ${(value / 1000000).toFixed(0)}M`;
     if (value >= 1000) return `R$ ${(value / 1000).toFixed(0)} mil`;
-    return new Intl.NumberFormat("pt-BR", { style: "currency", currency: "BRL", maximumFractionDigits: 0 }).format(value);
+    return new Intl.NumberFormat("pt-BR", {
+      style: "currency",
+      currency: "BRL",
+      maximumFractionDigits: 0,
+    }).format(value);
   };
 
   const getInitials = (name: string) =>
@@ -83,46 +82,74 @@ export function MarketingHeader({
   // --- MODO DE EDIÇÃO ---
   if (isEditing) {
     return (
-      <div className="flex items-center justify-between w-full p-3 rounded-xl border border-blue-900/50 bg-slate-900/95 backdrop-blur-sm shadow-xl animate-in fade-in slide-in-from-top-2">
-        <div className="flex items-center gap-3 px-2">
-          <div className="p-2 bg-blue-500/10 rounded-lg">
-            <Pencil size={16} className="text-blue-400" />
-          </div>
-          <div className="flex flex-col">
-            <span className="text-sm font-medium text-slate-200">
-              Você está editando esse dashboard para:
-            </span>
-            <div className="flex items-center gap-1 text-xs text-blue-400 font-bold uppercase tracking-wider">
-              <Monitor size={12} /> Desktop
-            </div>
+      // 🔥 A SUPER TRAVA: z-[99999], isolation e sticky top-0
+      <div
+        className="sticky top-0 left-0 w-full z-[99999] flex items-center justify-between px-5 py-4 mb-6 rounded-b-xl md:rounded-xl bg-[#272e48] text-white shadow-2xl"
+        style={{ isolation: "isolate" }}
+      >
+        <div className="flex items-center gap-3">
+          <Pencil size={16} className="text-slate-300" />
+          <span className="text-sm font-normal text-slate-300">
+            Você está editando esse dashboard para:
+          </span>
+          <div className="flex items-center gap-1 text-sm font-semibold text-white tracking-wide">
+            <Monitor size={14} /> Desktop
           </div>
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-4">
           <Button
+            type="button"
             variant="ghost"
             size="sm"
-            onClick={onReset}
-            className="text-slate-400 hover:text-white hover:bg-slate-800 gap-2"
+            style={{ cursor: "pointer" }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              onReset();
+            }}
+            className="text-slate-300 hover:text-white hover:bg-white/10 gap-2 font-normal z-50"
           >
             <RotateCcw size={14} /> Redefinir configurações
           </Button>
 
-          <div className="h-6 w-px bg-slate-800 mx-1" />
-
           <Button
+            type="button"
             variant="outline"
             size="sm"
-            onClick={() => setIsEditing(false)}
-            className="text-slate-300 hover:text-white hover:bg-slate-800"
+            style={{ cursor: "pointer" }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const y = window.scrollY; // Guarda a posição exata
+              setIsEditing(false); // Desmonta a edição
+
+              // 🔥 O truque definitivo: Espera o React atualizar a DOM e crava a tela no lugar
+              setTimeout(() => {
+                window.scrollTo({ top: y, behavior: "instant" });
+              }, 10);
+            }}
+            className="bg-transparent text-white border-slate-500 hover:bg-white/10 z-50"
           >
             Cancelar
           </Button>
 
           <Button
+            type="button"
             size="sm"
-            onClick={onSave}
-            className="text-white bg-blue-600 transition-all duration-300 hover:bg-blue-700 hover:shadow-[0_0_10px_1px_rgba(37,99,235,0.6)] hover:-translate-y-0.5 font-semibold px-6"
+            style={{ cursor: "pointer" }}
+            onClick={(e) => {
+              e.preventDefault();
+              e.stopPropagation();
+              const y = window.scrollY;
+
+              onSave(); // Salva no banco
+
+              setTimeout(() => {
+                window.scrollTo({ top: y, behavior: "instant" });
+              }, 10);
+            }}
+            className="bg-white text-[#272e48] hover:bg-gray-100 font-semibold px-6 shadow-sm z-50"
           >
             Salvar
           </Button>
@@ -139,7 +166,7 @@ export function MarketingHeader({
           Dashboard - Principal
         </h1>
         <div className="h-6 w-px bg-border mx-1 hidden sm:block" />
-        
+
         {!hideControls && (
           <div className="flex items-center gap-1">
             <TooltipProvider>
@@ -186,7 +213,7 @@ export function MarketingHeader({
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             <Trophy size={16} className="text-yellow-500" />
             <span className="font-medium text-foreground">Prêmios</span>
-            
+
             {/* 🔥 TOOLTIP RICO (Imagem 2) */}
             <TooltipProvider>
               <Tooltip delayDuration={200}>
@@ -196,24 +223,36 @@ export function MarketingHeader({
                     className="cursor-help opacity-50 hover:opacity-100 transition-opacity"
                   />
                 </TooltipTrigger>
-                <TooltipContent side="bottom" align="start" className="bg-[#0f1115] border-zinc-800 text-white p-3 max-w-[280px]">
-                    <div className="space-y-2">
-                      <p className="font-semibold text-xs">Progresso para receber prêmios.</p>
-                      <p className="text-[11px] text-zinc-400">
-                        Baseado no faturamento trackeado com a Utmify.
-                      </p>
-                      <div className="flex flex-col gap-0.5 pt-1">
-                        <span className="text-[10px] text-zinc-500 font-medium">(atualizado semanalmente)</span>
-                        <span className="text-[10px] text-zinc-500 font-medium">[apenas para assinantes]</span>
-                      </div>
+                <TooltipContent
+                  side="bottom"
+                  align="start"
+                  className="bg-[#0f1115] border-zinc-800 text-white p-3 max-w-[280px]"
+                >
+                  <div className="space-y-2">
+                    <p className="font-semibold text-xs">
+                      Progresso para receber prêmios.
+                    </p>
+                    <p className="text-[11px] text-zinc-400">
+                      Baseado no faturamento trackeado com a ScaleDrop.
+                    </p>
+                    <div className="flex flex-col gap-0.5 pt-1">
+                      <span className="text-[10px] text-zinc-500 font-medium">
+                        (atualizado semanalmente)
+                      </span>
+                      {/*                       <span className="text-[10px] text-zinc-500 font-medium">
+                        [apenas para assinantes]
+                      </span> */}
                     </div>
+                  </div>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
 
             {/* 🔥 TEXTO DA META DINÂMICO */}
             <span className="ml-1 font-mono text-[11px] opacity-80">
-              {formatShortCurrency(currentRevenue)} <span className="text-muted-foreground/50">/</span> {formatShortCurrency(nextGoal)}
+              {formatShortCurrency(currentRevenue)}{" "}
+              <span className="text-muted-foreground/50">/</span>{" "}
+              {formatShortCurrency(nextGoal)}
             </span>
           </div>
 
@@ -227,7 +266,7 @@ export function MarketingHeader({
         </div>
 
         <div className="h-8 w-px bg-border hidden sm:block" />
-        
+
         <div className="flex items-center gap-3 self-end sm:self-auto">
           <div className="flex flex-col items-end">
             <span className="text-sm font-semibold text-foreground leading-none">

@@ -1,17 +1,15 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import React, { useState } from "react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogFooter,
-  DialogDescription,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Select,
   SelectContent,
@@ -19,203 +17,156 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Info } from "lucide-react";
+import { Facebook } from "lucide-react"; // Importando a logo do Meta/Facebook
 import { cn } from "@/lib/utils";
 
+// Strict typings
+type AdAccountOption = { id: string; name: string };
+
 interface DuplicateModalProps {
-  open: boolean;
+  isOpen: boolean;
   onOpenChange: (open: boolean) => void;
   onConfirm: (data: {
     mode: "same" | "other";
-    targetAccount?: string;
-    copies: number;
+    targetAccountId?: string;
+    copiesCount: number;
   }) => void;
-  level: string; // 'campanhas', 'conjuntos', 'anuncios'
+  adAccounts: AdAccountOption[];
   count: number;
 }
 
 export function DuplicateModal({
-  open,
+  isOpen,
   onOpenChange,
   onConfirm,
-  level,
+  adAccounts,
   count,
 }: DuplicateModalProps) {
-  const [mode, setMode] = useState<"same" | "other">("same");
-  const [targetAccount, setTargetAccount] = useState("");
-  const [copies, setCopies] = useState("1");
-
-  // Reseta o estado quando o modal abre
-  useEffect(() => {
-    if (open) {
-      setMode("same");
-      setTargetAccount("");
-      setCopies("1");
-    }
-  }, [open]);
-
-  // Define os textos baseados no nível
-  const entityName =
-    level === "campanhas"
-      ? "sua campanha"
-      : level === "conjuntos"
-        ? "seu conjunto"
-        : "seu anúncio";
-  const pluralEntity =
-    level === "campanhas"
-      ? "campanhas"
-      : level === "conjuntos"
-        ? "conjuntos"
-        : "anúncios";
-
-  // Regra: Apenas campanhas podem ir para outra conta
-  const canTransfer = level === "campanhas";
+  const [duplicateMode, setDuplicateMode] = useState<"same" | "other">("same");
+  const [copiesCount, setCopiesCount] = useState<number>(1);
+  const [targetAccountId, setTargetAccountId] = useState<string>("");
 
   const handleConfirm = () => {
-    const numCopies = parseInt(copies);
-    if (numCopies > 0) {
-      onConfirm({
-        mode,
-        targetAccount: mode === "other" ? targetAccount : undefined,
-        copies: numCopies,
-      });
-      onOpenChange(false);
-    }
+    onConfirm({
+      mode: duplicateMode,
+      targetAccountId: duplicateMode === "other" ? targetAccountId : undefined,
+      copiesCount: copiesCount,
+    });
   };
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="sm:max-w-[500px] bg-card border-border text-card-foreground shadow-xl">
+    <Dialog open={isOpen} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[450px] bg-background border-border text-foreground">
         <DialogHeader>
-          <DialogTitle className="text-lg font-semibold">
-            Duplique {entityName}
+          <DialogTitle className="text-lg font-semibold text-foreground">
+            Duplique sua campanha
           </DialogTitle>
-          <DialogDescription className="text-muted-foreground">
-            Escolha como você quer duplicar{" "}
-            {level === "campanhas" ? "sua campanha" : "seu item"}.
-          </DialogDescription>
+          <p className="text-sm text-muted-foreground">
+            Escolha como você quer duplicar sua campanha.
+          </p>
         </DialogHeader>
 
-        <div className="py-4 space-y-4">
-          {/* OPÇÃO 1: MESMA CONTA */}
-          <div
-            onClick={() => setMode("same")}
-            className={cn(
-              "cursor-pointer border rounded-lg p-4 transition-all relative",
-              mode === "same"
-                ? "border-blue-500 bg-blue-500/10"
-                : "border-border hover:border-muted-foreground/50",
-            )}
-          >
-            <h3
+        <div className="flex flex-col gap-4 py-4">
+          {/* Options Selection */}
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => setDuplicateMode("same")}
               className={cn(
-                "text-sm font-bold mb-1",
-                mode === "same" ? "text-blue-500" : "text-foreground",
+                "flex flex-col items-start p-3 rounded-lg border transition-all text-left",
+                duplicateMode === "same"
+                  ? "bg-blue-600/10 border-blue-600 text-blue-600 dark:text-blue-500"
+                  : "bg-transparent border-border text-muted-foreground hover:border-border/80",
               )}
             >
-              Mesma Conta de Anúncio
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              {level === "campanhas" ? "Sua campanha" : "Seu item"} será
-              duplicado na mesma conta de anúncio a que pertence.
-            </p>
-          </div>
+              <span className="text-sm font-medium mb-1">
+                Mesma Conta de Anúncio
+              </span>
+              <span className="text-xs opacity-80">
+                Sua campanha será duplicada na mesma conta de anúncio a que
+                pertence.
+              </span>
+            </button>
 
-          {/* OPÇÃO 2: OUTRA CONTA */}
-          <div
-            onClick={() => canTransfer && setMode("other")}
-            className={cn(
-              "border rounded-lg p-4 transition-all relative",
-              canTransfer ? "cursor-pointer" : "cursor-not-allowed opacity-60",
-              mode === "other"
-                ? "border-blue-500 bg-blue-500/10"
-                : "border-border",
-              !canTransfer && "bg-muted/20",
-            )}
-          >
-            <h3
+            <button
+              onClick={() => setDuplicateMode("other")}
               className={cn(
-                "text-sm font-bold mb-1",
-                mode === "other" ? "text-blue-500" : "text-foreground",
+                "flex flex-col items-start p-3 rounded-lg border transition-all text-left",
+                duplicateMode === "other"
+                  ? "bg-blue-600/10 border-blue-600 text-blue-600 dark:text-blue-500"
+                  : "bg-transparent border-border text-muted-foreground hover:border-border/80",
               )}
             >
-              Outra Conta de Anúncio
-            </h3>
-            <p className="text-xs text-muted-foreground">
-              {level === "campanhas" ? "Sua campanha" : "Seu item"} será
-              duplicado em outra conta de anúncio que você escolher.
-            </p>
-
-            {/* Aviso se não puder transferir (Igual ao print) */}
-            {!canTransfer && (
-              <div className="flex items-center gap-2 mt-3 text-[11px] text-muted-foreground">
-                <Info size={12} />
-                <span>
-                  Apenas campanhas podem ser transferidas para outras contas de
-                  anúncio.
-                </span>
-              </div>
-            )}
+              <span className="text-sm font-medium mb-1">
+                Outra Conta de Anúncio
+              </span>
+              <span className="text-xs opacity-80">
+                Sua campanha será duplicada em outra conta de anúncio que você
+                escolher.
+              </span>
+            </button>
           </div>
 
-          {/* INPUTS CONDICIONAIS */}
-          <div className="space-y-4 pt-2">
-            {/* SELECT DE CONTA (Só aparece se mode == other) */}
-            {mode === "other" && (
-              <div className="space-y-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                <Label className="text-xs font-medium">
-                  Escolha a Conta de Anúncio
-                </Label>
-                <Select value={targetAccount} onValueChange={setTargetAccount}>
-                  <SelectTrigger className="w-full bg-background border-border">
-                    <SelectValue placeholder="Selecione a conta de destino" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="ca01">
-                      Conta 01 - Principal (Atual)
+          {/* Account Selector */}
+          {duplicateMode === "other" && (
+            <div className="flex flex-col gap-1.5 animate-in fade-in zoom-in duration-200">
+              <label className="text-xs font-medium text-muted-foreground">
+                Escolha a Conta de Anúncio
+              </label>
+              <Select
+                value={targetAccountId}
+                onValueChange={setTargetAccountId}
+              >
+                <SelectTrigger className="w-full h-9 bg-background border-border focus:ring-blue-600">
+                  <SelectValue placeholder="Selecione a conta..." />
+                </SelectTrigger>
+                <SelectContent className="bg-background border-border text-foreground">
+                  {adAccounts.map((acc) => (
+                    <SelectItem
+                      key={acc.id}
+                      value={acc.id}
+                      className="focus:bg-blue-500/10 focus:text-blue-600 cursor-pointer"
+                    >
+                      <div className="flex items-center gap-2">
+                        <Facebook className="w-4 h-4 text-blue-600" />
+                        <span>{acc.name}</span>
+                      </div>
                     </SelectItem>
-                    <SelectItem value="ca02">Conta 02 - Reserva</SelectItem>
-                    <SelectItem value="ca03">Conta 03 - Scale Drop</SelectItem>
-                  </SelectContent>
-                </Select>
-              </div>
-            )}
-
-            {/* QUANTIDADE DE CÓPIAS (Sempre aparece) */}
-            <div className="space-y-2">
-              <Label htmlFor="copies" className="text-xs font-medium">
-                Quantidade de cópias
-              </Label>
-              <Input
-                id="copies"
-                type="number"
-                min={1}
-                max={50}
-                className="bg-background border-border"
-                value={copies}
-                onChange={(e) => setCopies(e.target.value)}
-              />
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
+          )}
+
+          {/* Copies Input */}
+          <div className="flex flex-col gap-1.5">
+            <label className="text-xs font-medium text-muted-foreground">
+              Quantidade de cópias
+            </label>
+            <Input
+              type="number"
+              min={1}
+              max={100}
+              value={copiesCount}
+              onChange={(e) => setCopiesCount(Number(e.target.value))}
+              className="h-9 bg-background border-border text-foreground focus-visible:ring-blue-600 [appearance:textfield] [&::-webkit-outer-spin-button]:appearance-none [&::-webkit-inner-spin-button]:appearance-none"
+            />
           </div>
         </div>
 
-        <DialogFooter className="gap-3">
+        <DialogFooter className="gap-2 sm:gap-0">
           <Button
-            variant="outline"
+            variant="ghost"
             onClick={() => onOpenChange(false)}
-            className="border-border text-foreground"
+            className="hover:bg-muted text-foreground"
           >
             Cancelar
           </Button>
           <Button
             onClick={handleConfirm}
             className="bg-blue-600 hover:bg-blue-700 text-white"
-            // Desabilita se for "other" e não tiver conta selecionada, ou se copias for inválido
-            disabled={
-              (mode === "other" && !targetAccount) || parseInt(copies) < 1
-            }
+            disabled={duplicateMode === "other" && !targetAccountId}
           >
-            Duplicar
+            Duplicar {count > 1 ? `(${count})` : ""}
           </Button>
         </DialogFooter>
       </DialogContent>

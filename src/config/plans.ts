@@ -4,9 +4,9 @@ export const PLAN_LIMITS = {
   START: {
     sales: 500,          // Limite de vendas rastreadas
     stores: 1,           // Lojas conectadas
-    integrations: 2,     // Integrações ativas
+    integrations: 8,     // Integrações ativas
     adAccounts: 1,       // Contas de anúncio
-    pixels: 1,           // Pixels de otimização
+    pixels: 3,           // Pixels de otimização
     utms: 5,             // Limite de UTMs
     rules: 0,            // Sem regras automatizadas
     reports: "basic",    // Nível do relatório

@@ -16,55 +16,67 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 
-// Dados mockados das 24 horas (idêntico à sua referência)
-const chartData = [
-  { hour: "00:00", sales: 15, perc: "1.5%" },
-  { hour: "01:00", sales: 0, perc: "" },
-  { hour: "02:00", sales: 0, perc: "" },
-  { hour: "03:00", sales: 0, perc: "" },
-  { hour: "04:00", sales: 0, perc: "" },
-  { hour: "05:00", sales: 15, perc: "1.5%" },
-  { hour: "06:00", sales: 0, perc: "" },
-  { hour: "07:00", sales: 76, perc: "7.6%" },
-  { hour: "08:00", sales: 15, perc: "1.5%" },
-  { hour: "09:00", sales: 61, perc: "6.1%" },
-  { hour: "10:00", sales: 0, perc: "" },
-  { hour: "11:00", sales: 45, perc: "4.5%" },
-  { hour: "12:00", sales: 106, perc: "10.6%" },
-  { hour: "13:00", sales: 273, perc: "27.3%" },
-  { hour: "14:00", sales: 15, perc: "1.5%" },
-  { hour: "15:00", sales: 91, perc: "9.1%" },
-  { hour: "16:00", sales: 15, perc: "1.5%" },
-  { hour: "17:00", sales: 15, perc: "1.5%" },
-  { hour: "18:00", sales: 45, perc: "4.5%" },
-  { hour: "19:00", sales: 30, perc: "3.0%" },
-  { hour: "20:00", sales: 30, perc: "3.0%" },
-  { hour: "21:00", sales: 91, perc: "9.1%" },
-  { hour: "22:00", sales: 45, perc: "4.5%" },
-  { hour: "23:00", sales: 15, perc: "1.5%" },
-];
+// 1. Tipagem exata do que o backend agora envia
+interface SalesByHourData {
+  hour: string;
+  salesCount: number;
+}
+
+interface SalesByHourChartProps {
+  chartData?: SalesByHourData[];
+}
 
 const chartConfig = {
   sales: {
     label: "Total de vendas",
-    color: "#1d4ed8",
+    color: "#1d4ed8", // O azul da sua paleta
   },
 } satisfies ChartConfig;
 
-export default function SalesByHourChart() {
+export default function SalesByHourChart({
+  chartData = [],
+}: SalesByHourChartProps) {
+  // 2. Cria o array de 24 horas de segurança caso os dados demorem a chegar
+  const safeData =
+    chartData.length > 0
+      ? chartData
+      : Array.from({ length: 24 }, (_, i) => ({
+          hour: `${String(i).padStart(2, "0")}:00`,
+          salesCount: 0,
+        }));
+
+  // 3. Descobre o total de vendas do dia para calcular as porcentagens de cada hora
+  const totalSales = safeData.reduce(
+    (acc, val) => acc + (val.salesCount || 0),
+    0,
+  );
+
+  // 4. Formata os dados para o formato exato que o Recharts espera
+  const processedData = safeData.map((item) => {
+    const sales = item.salesCount || 0;
+    const percentage =
+      totalSales > 0 ? ((sales / totalSales) * 100).toFixed(1) + "%" : "0.0%";
+
+    return {
+      hour: item.hour,
+      sales: sales,
+      percentage: percentage,
+    };
+  });
+
   return (
     <div className="flex-1 w-full h-full min-h-[200px] mt-2">
       <ChartContainer config={chartConfig} className="w-full h-full">
         <ResponsiveContainer width="100%" height="100%">
           <BarChart
-            data={chartData}
-            margin={{ top: 25, right: 0, left: 0, bottom: 0 }}
+            data={processedData}
+            margin={{ top: 25, right: 10, left: 10, bottom: 10 }}
           >
             <CartesianGrid
               vertical={false}
               stroke="#cccccc"
               strokeDasharray="3 3"
-              opacity={0.4}
+              opacity={0.2}
             />
 
             <XAxis
@@ -72,9 +84,8 @@ export default function SalesByHourChart() {
               tickLine={false}
               tickMargin={10}
               axisLine={false}
-              // Fonte um pouquinho menor para caber as 24 horas sem encavalar
               tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
-              interval="preserveStartEnd"
+              interval="preserveStartEnd" // Garante que a primeira e última hora apareçam
             />
 
             <ChartTooltip
@@ -88,10 +99,12 @@ export default function SalesByHourChart() {
               radius={[2, 2, 0, 0]}
             >
               <LabelList
-                dataKey="perc"
+                dataKey="percentage"
                 position="top"
                 offset={8}
                 className="fill-muted-foreground text-[9px] font-medium"
+                // Oculta visualmente os "0.0%" em horas sem venda para o gráfico ficar limpo
+                formatter={(value: string) => (value === "0.0%" ? "" : value)}
               />
             </Bar>
           </BarChart>

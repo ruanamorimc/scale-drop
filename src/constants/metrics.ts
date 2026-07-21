@@ -14,7 +14,7 @@ export const ALL_METRICS = [
   { id: "reembolso_perc", label: "Taxa de Reembolso" },
   { id: "chargeback", label: "Chargeback" },
   { id: "arpu", label: "ARPU" },
-  { id: "imposto", label: "Imposto" },
+  { id: "imposto_vendas", label: "Imposto Sobre Vendas" },
   { id: "imposto_meta_ads", label: "Imposto Meta Ads" },
   { id: "imposto_total", label: "Imposto Total" },
   { id: "custos_produto", label: "Custos de Produto" },

@@ -1,230 +1,326 @@
 "use client";
 
-import { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
+  DialogDescription,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
+import { Zap, ShieldCheck, ChevronDown, Check, Loader2 } from "lucide-react";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import { Checkbox } from "@/components/ui/checkbox";
-import {
-  Activity,
-  ShieldCheck,
-  Zap,
-  Loader2,
-  CheckCircle2,
-} from "lucide-react";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
-interface DiagnosticModalProps {
+type DiagnosticModalProps = {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-}
+  adAccounts: { id: string; name: string }[];
+  // 🔥 RECEBE A FUNÇÃO REAL QUE VAI CONVERSAR COM O SEU BACKEND
+  onVerify: (
+    selectedAccounts: string[],
+    mode: "rapido" | "seguro",
+  ) => Promise<void>;
+};
 
-// Estados do Wizard
-type Step = "intro" | "selection" | "analyzing" | "result";
+export function DiagnosticModal({
+  open,
+  onOpenChange,
+  adAccounts,
+  onVerify,
+}: DiagnosticModalProps) {
+  const [step, setStep] = useState<1 | 2>(1);
+  const [mode, setMode] = useState<"rapido" | "seguro">("rapido");
+  const [selectedAccounts, setSelectedAccounts] = useState<string[]>([]);
+  const [isVerifying, setIsVerifying] = useState(false);
 
-export function DiagnosticModal({ open, onOpenChange }: DiagnosticModalProps) {
-  const [step, setStep] = useState<Step>("intro");
-  const [selectedAccount, setSelectedAccount] = useState<string>("");
+  useEffect(() => {
+    if (!open) {
+      const timer = setTimeout(() => {
+        setStep(1);
+        setMode("rapido");
+        setSelectedAccounts([]);
+        setIsVerifying(false);
+      }, 300);
+      return () => clearTimeout(timer);
+    }
+  }, [open]);
 
-  // Função para resetar o modal ao fechar
-  const handleOpenChange = (val: boolean) => {
-    onOpenChange(val);
-    if (!val) {
-      setTimeout(() => setStep("intro"), 300); // Reseta após a animação de fechar
+  const handleToggleAccount = (id: string) => {
+    if (id === "all") {
+      if (selectedAccounts.includes("all")) {
+        setSelectedAccounts([]);
+      } else {
+        setSelectedAccounts(["all"]);
+      }
+      return;
+    }
+
+    let newSelection = selectedAccounts.filter((c) => c !== "all");
+    if (newSelection.includes(id)) {
+      newSelection = newSelection.filter((c) => c !== id);
+    } else {
+      newSelection.push(id);
+    }
+
+    if (newSelection.length === adAccounts.length && adAccounts.length > 0) {
+      newSelection = ["all"];
+    }
+    setSelectedAccounts(newSelection);
+  };
+
+  const handleVerify = async () => {
+    if (selectedAccounts.length === 0) {
+      toast.warning("Selecione pelo menos uma conta de anúncio.");
+      return;
+    }
+
+    setIsVerifying(true);
+    try {
+      // Se "Selecionar todas" estiver ativo, mapeia para os IDs de todas as contas reais
+      const accountsToVerify = selectedAccounts.includes("all")
+        ? adAccounts.map((acc) => acc.id)
+        : selectedAccounts;
+
+      // 🔥 EXECUTA A SUA AÇÃO REAL DE INTEGRAÇÃO
+      await onVerify(accountsToVerify, mode);
+
+      onOpenChange(false);
+    } catch (error) {
+      console.error(error);
+      toast.error("Falha ao rodar diagnóstico. Tente novamente.");
+    } finally {
+      setIsVerifying(false);
     }
   };
 
-  // Simula a análise
-  const startAnalysis = () => {
-    setStep("analyzing");
-    // Simula um tempo de processamento de 2 segundos
-    setTimeout(() => {
-      setStep("result");
-    }, 2000);
-  };
-
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
-      {/* 🔥 MUDANÇA AQUI: 
-         1. Trocamos bg-[#1A1D21] por 'bg-card' (adapta ao tema)
-         2. Mantemos text-card-foreground para o texto se adaptar
-      */}
-      <DialogContent className="sm:max-w-[600px] bg-card border-border text-card-foreground shadow-xl">
-        <DialogHeader>
-          <DialogTitle className="text-lg font-semibold">
-            {step === "result" ? "Relatório de Diagnóstico" : "Diagnóstico"}
-          </DialogTitle>
-        </DialogHeader>
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="sm:max-w-[500px] bg-background border-border p-0 overflow-hidden shadow-2xl">
+        <div className="p-6">
+          <DialogHeader className="mb-6">
+            <DialogTitle className="text-xl font-semibold text-foreground">
+              Diagnóstico
+            </DialogTitle>
+            <DialogDescription className="text-sm text-muted-foreground/80 pt-1">
+              {step === 1
+                ? "Analise suas campanhas ativas e identifique quais anúncios não possuem a configuração correta de parâmetros UTM."
+                : "Selecione as contas de anúncio que quer verificar a configuração:"}
+            </DialogDescription>
+          </DialogHeader>
 
-        {/* --- PASSO 1: INTRODUÇÃO --- */}
-        {step === "intro" && (
-          <div className="space-y-6 py-2">
-            <p className="text-sm text-muted-foreground">
-              Analise suas campanhas ativas e identifique quais anúncios não
-              possuem a configuração correta de parâmetros UTM.
-            </p>
-
-            <div className="grid gap-4">
-              {/* Cards internos usando bg-muted/30 para funcionar no claro e escuro */}
-              <div className="flex items-start gap-4 p-3 rounded-lg border border-blue-500/20 bg-blue-500/5 dark:bg-blue-500/10">
-                <div className="p-2 rounded-full bg-blue-500/10 text-blue-600 dark:text-blue-400">
-                  <Zap size={20} />
-                </div>
-                <div>
-                  <h4 className="font-medium text-sm text-blue-600 dark:text-blue-400">
-                    Rápido
-                  </h4>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Análise em segundos. Verifica a estrutura básica das URLs.
-                  </p>
-                </div>
-              </div>
-
-              <div className="flex items-start gap-4 p-3 rounded-lg border border-emerald-500/20 bg-emerald-500/5 dark:bg-emerald-500/10">
-                <div className="p-2 rounded-full bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
-                  <ShieldCheck size={20} />
-                </div>
-                <div>
-                  <h4 className="font-medium text-sm text-emerald-600 dark:text-emerald-400">
-                    Seguro
-                  </h4>
-                  <p className="text-xs text-muted-foreground mt-1">
-                    Não afeta a veiculação das campanhas. Apenas leitura.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="flex justify-end pt-2">
-              <Button
-                className="bg-blue-600 hover:bg-blue-700 text-white min-w-[120px]"
-                onClick={() => setStep("selection")}
+          {step === 1 && (
+            <div className="flex flex-col gap-3">
+              <div
+                onClick={() => setMode("rapido")}
+                className={cn(
+                  "p-4 rounded-xl border flex items-start gap-4 cursor-pointer transition-all duration-200",
+                  mode === "rapido"
+                    ? "border-blue-500/50 bg-blue-500/10"
+                    : "border-border bg-muted/30 hover:bg-muted/50",
+                )}
               >
-                Iniciar
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* --- PASSO 2: SELEÇÃO DE CONTA --- */}
-        {step === "selection" && (
-          <div className="space-y-6 py-2">
-            <div className="space-y-2">
-              <h3 className="text-sm font-medium text-foreground">
-                Selecione as contas de anúncio que quer verificar a
-                configuração:
-              </h3>
-              <div className="text-xs text-muted-foreground mb-4">
-                Conta de Anúncio
-              </div>
-
-              <Select
-                value={selectedAccount}
-                onValueChange={setSelectedAccount}
-              >
-                <SelectTrigger className="w-full bg-background border-border">
-                  <SelectValue placeholder="Selecione uma conta" />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="all">Selecionar todas</SelectItem>
-                  <SelectItem value="ca01">Conta 01 - Principal</SelectItem>
-                  <SelectItem value="ca02">Conta 02 - Reserva</SelectItem>
-                </SelectContent>
-              </Select>
-
-              {/* Checkbox adaptado */}
-              <div className="mt-4 flex items-center space-x-2 p-3 border border-border rounded-md bg-muted/30">
-                <Checkbox id="terms" checked={true} disabled />
-                <label
-                  htmlFor="terms"
-                  className="text-sm font-medium leading-none text-foreground peer-disabled:cursor-not-allowed peer-disabled:opacity-70"
+                <div
+                  className={cn(
+                    "p-2 rounded-lg mt-0.5",
+                    mode === "rapido" ? "bg-blue-500/20" : "bg-muted",
+                  )}
                 >
-                  Verificar apenas campanhas ativas
-                </label>
+                  <Zap
+                    className={cn(
+                      "w-5 h-5",
+                      mode === "rapido"
+                        ? "text-blue-500 fill-blue-500/20"
+                        : "text-muted-foreground",
+                    )}
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span
+                    className={cn(
+                      "font-semibold text-sm",
+                      mode === "rapido" ? "text-blue-500" : "text-foreground",
+                    )}
+                  >
+                    Rápido
+                  </span>
+                  <span className="text-[13px] text-muted-foreground/80 leading-relaxed">
+                    Análise em segundos. Verifica a estrutura básica das URLs.
+                  </span>
+                </div>
               </div>
-            </div>
 
-            <div className="flex justify-between pt-2">
-              <Button
-                variant="ghost"
-                onClick={() => setStep("intro")}
-                className="text-muted-foreground hover:text-foreground"
+              <div
+                onClick={() => setMode("seguro")}
+                className={cn(
+                  "p-4 rounded-xl border flex items-start gap-4 cursor-pointer transition-all duration-200",
+                  mode === "seguro"
+                    ? "border-emerald-500/50 bg-emerald-500/10"
+                    : "border-border bg-muted/30 hover:bg-muted/50",
+                )}
               >
-                Voltar
-              </Button>
-              <Button
-                className="bg-blue-600 hover:bg-blue-700 text-white"
-                onClick={startAnalysis}
-                disabled={!selectedAccount}
-              >
-                Verificar Agora
-              </Button>
-            </div>
-          </div>
-        )}
-
-        {/* --- PASSO 3: ANALISANDO (LOADING) --- */}
-        {step === "analyzing" && (
-          <div className="flex flex-col items-center justify-center py-10 space-y-4">
-            <Loader2 className="h-12 w-12 text-blue-500 animate-spin" />
-            <p className="text-sm text-muted-foreground animate-pulse">
-              Analisando parâmetros UTM dos anúncios...
-            </p>
-          </div>
-        )}
-
-        {/* --- PASSO 4: RESULTADO (SUCESSO) --- */}
-        {step === "result" && (
-          <div className="flex flex-col items-center justify-center py-6 space-y-6 text-center">
-            <div className="relative">
-              <div className="absolute inset-0 bg-emerald-500/20 blur-xl rounded-full" />
-              <CheckCircle2 className="h-20 w-20 text-emerald-500 relative z-10" />
-            </div>
-
-            <div className="space-y-2">
-              <h2 className="text-2xl font-bold text-emerald-600 dark:text-emerald-500">
-                Parabéns!
-              </h2>
-              <p className="text-muted-foreground max-w-xs mx-auto">
-                Todas as suas campanhas estão configuradas corretamente.
-              </p>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 w-full max-w-sm mt-4">
-              <div className="bg-background border border-border rounded-lg p-3 flex flex-col items-center shadow-sm">
-                <span className="text-2xl font-bold text-foreground">0</span>
-                <span className="text-xs text-muted-foreground text-center">
-                  com erro
-                </span>
-              </div>
-              <div className="bg-background border border-border rounded-lg p-3 flex flex-col items-center shadow-sm">
-                <span className="text-2xl font-bold text-foreground">0</span>
-                <span className="text-xs text-muted-foreground text-center">
-                  atenção
-                </span>
+                <div
+                  className={cn(
+                    "p-2 rounded-lg mt-0.5",
+                    mode === "seguro" ? "bg-emerald-500/20" : "bg-muted",
+                  )}
+                >
+                  <ShieldCheck
+                    className={cn(
+                      "w-5 h-5",
+                      mode === "seguro"
+                        ? "text-emerald-500"
+                        : "text-muted-foreground",
+                    )}
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <span
+                    className={cn(
+                      "font-semibold text-sm",
+                      mode === "seguro"
+                        ? "text-emerald-500"
+                        : "text-foreground",
+                    )}
+                  >
+                    Seguro
+                  </span>
+                  <span className="text-[13px] text-muted-foreground/80 leading-relaxed">
+                    Não afeta a veiculação das campanhas. Apenas leitura.
+                  </span>
+                </div>
               </div>
             </div>
+          )}
 
+          {step === 2 && (
+            <div className="flex flex-col gap-1.5 mt-2 min-h-[140px]">
+              <label className="text-xs font-medium text-muted-foreground">
+                Conta de Anúncio
+              </label>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="w-full justify-between border-border bg-background hover:bg-muted/50 text-foreground font-normal h-10 px-3"
+                  >
+                    <span className="truncate text-sm">
+                      {selectedAccounts.length === 0
+                        ? "Nenhum"
+                        : selectedAccounts.includes("all")
+                          ? "Todas selecionadas"
+                          : `${selectedAccounts.length} selecionada(s)`}
+                    </span>
+                    <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent
+                  className="w-[440px] p-2 border-border bg-[#111317] shadow-xl rounded-xl"
+                  align="start"
+                >
+                  <div className="flex flex-col gap-1 max-h-[250px] overflow-y-auto">
+                    <div
+                      onClick={() => handleToggleAccount("all")}
+                      className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-zinc-800/80 cursor-pointer transition-colors"
+                    >
+                      <div
+                        className={cn(
+                          "h-4 w-4 rounded-[4px] border flex items-center justify-center transition-all",
+                          selectedAccounts.includes("all")
+                            ? "bg-blue-600 border-blue-600"
+                            : "border-zinc-600 bg-zinc-900",
+                        )}
+                      >
+                        {selectedAccounts.includes("all") && (
+                          <Check
+                            size={12}
+                            className="text-white"
+                            strokeWidth={3}
+                          />
+                        )}
+                      </div>
+                      <span className="text-sm font-medium text-zinc-200">
+                        Selecionar todas
+                      </span>
+                    </div>
+
+                    {adAccounts.length > 0 && (
+                      <div className="h-px bg-zinc-800 my-1 w-full" />
+                    )}
+
+                    {adAccounts.map((acc) => {
+                      const isSelected =
+                        selectedAccounts.includes("all") ||
+                        selectedAccounts.includes(acc.id);
+                      return (
+                        <div
+                          key={acc.id}
+                          onClick={() => handleToggleAccount(acc.id)}
+                          className="flex items-center gap-3 p-2.5 rounded-lg hover:bg-zinc-800/80 cursor-pointer transition-colors"
+                        >
+                          <div
+                            className={cn(
+                              "h-4 w-4 rounded-[4px] border flex items-center justify-center transition-all",
+                              isSelected
+                                ? "bg-blue-600 border-blue-600"
+                                : "border-zinc-600 bg-zinc-900",
+                            )}
+                          >
+                            {isSelected && (
+                              <Check
+                                size={12}
+                                className="text-white"
+                                strokeWidth={3}
+                              />
+                            )}
+                          </div>
+                          <span className="text-sm font-medium text-zinc-300 truncate">
+                            {acc.name}
+                          </span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </PopoverContent>
+              </Popover>
+            </div>
+          )}
+        </div>
+
+        <div className="bg-muted/30 px-6 py-4 border-t border-border flex items-center justify-end gap-3">
+          {step === 2 && (
             <Button
-              variant="outline"
-              className="w-full max-w-sm border-border mt-4"
-              onClick={() => handleOpenChange(false)}
+              variant="ghost"
+              onClick={() => setStep(1)}
+              disabled={isVerifying}
+              className="text-muted-foreground hover:text-foreground font-medium"
             >
-              Fechar
+              Voltar
             </Button>
-          </div>
-        )}
+          )}
+          <Button
+            onClick={() => (step === 1 ? setStep(2) : handleVerify())}
+            disabled={isVerifying}
+            className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6"
+          >
+            {isVerifying ? (
+              <>
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                Verificando...
+              </>
+            ) : step === 1 ? (
+              "Iniciar"
+            ) : (
+              "Verificar Agora"
+            )}
+          </Button>
+        </div>
       </DialogContent>
     </Dialog>
   );

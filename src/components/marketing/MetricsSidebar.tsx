@@ -12,7 +12,6 @@ type Props = {
 };
 
 export default function MetricsSidebar({ activeMetrics }: Props) {
-  // O array vazio garante que o lag não volte nunca mais!
   useEffect(() => {
     const timer = setTimeout(() => {
       GridStack.setupDragIn(".sidebar-draggable", {
@@ -22,10 +21,11 @@ export default function MetricsSidebar({ activeMetrics }: Props) {
     }, 100);
 
     return () => clearTimeout(timer);
-  }, []);
+  }, [activeMetrics]);
 
   return (
-    <div className="w-full h-[950px] max-h-[96vh] flex flex-col bg-card border-y border-r border-border rounded-r-3xl overflow-hidden shadow-2xl transition-colors duration-300">
+    // 🔥 MAGIA DA UTMIFY: fixed, h-screen, top-0, left-0 e z-[90]
+    <aside className="fixed top-0 left-0 h-screen w-[260px] flex flex-col bg-background border-r border-border z-[100] shadow-[15px_0_30px_-15px_rgba(0,0,0,0.5)]">
       <div className="p-6 border-b border-border bg-muted/30 shrink-0">
         <h3 className="text-base font-semibold text-foreground tracking-tight">
           Métricas Disponíveis
@@ -45,7 +45,7 @@ export default function MetricsSidebar({ activeMetrics }: Props) {
               <div
                 key={metric.id}
                 gs-id={metric.id}
-                data-gs-id={metric.id} // 🔥 BLINDAGEM: Garante que o card não perca a memória de quem ele é no voo!
+                data-gs-id={metric.id} // 🔥 BLINDAGEM: Garante que o card não perca a memória
                 gs-w={constraints.w}
                 gs-h={constraints.h}
                 className={cn(
@@ -70,6 +70,6 @@ export default function MetricsSidebar({ activeMetrics }: Props) {
           })}
         </div>
       </div>
-    </div>
+    </aside>
   );
 }

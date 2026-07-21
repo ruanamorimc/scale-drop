@@ -20,15 +20,12 @@ const HeaderWithTooltip = ({
   title: string;
   tooltip: string;
 }) => (
-  <div className="flex items-center gap-1.5 group cursor-help">
+  <div className="flex items-center gap-1.5 cursor-help">
     <span className="whitespace-nowrap">{title}</span>
     <TooltipProvider delayDuration={200}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <Info
-            size={12}
-            className="text-muted-foreground/50 group-hover:text-primary transition-colors shrink-0"
-          />
+          <Info size={12} className="text-muted-foreground/50 shrink-0" />
         </TooltipTrigger>
         <TooltipContent className="max-w-[220px] text-xs font-normal bg-popover text-popover-foreground border-border shadow-md z-50">
           <p>{tooltip}</p>
@@ -38,31 +35,40 @@ const HeaderWithTooltip = ({
   </div>
 );
 
-// --- FORMATAÇÃO VISUAL ---
-const formatCurrency = (value: number) => {
+// --- STRICT FORMATTING FUNCTIONS (NO 'ANY') ---
+const formatCurrency = (value: unknown) => {
   if (value === undefined || value === null) return "-";
+  const numValue = Number(value);
+  if (isNaN(numValue)) return "-";
   return new Intl.NumberFormat("pt-BR", {
     style: "currency",
     currency: "BRL",
-  }).format(value);
+  }).format(numValue);
 };
 
-const formatNumber = (value: number) => {
+const formatNumber = (value: unknown) => {
   if (value === undefined || value === null) return "-";
-  return new Intl.NumberFormat("pt-BR").format(value);
+  const numValue = Number(value);
+  if (isNaN(numValue)) return "-";
+  return new Intl.NumberFormat("pt-BR").format(numValue);
 };
 
-const formatPercent = (value: number) => {
+const formatPercent = (value: unknown) => {
   if (value === undefined || value === null) return "-";
-  return `${value.toFixed(2)}%`;
+  const numValue = Number(value);
+  if (isNaN(numValue)) return "-";
+  return `${numValue.toFixed(2)}%`;
 };
 
-// --- DEFINIÇÃO DAS COLUNAS (Tornei uma função para aceitar o nível dinâmico se precisar no futuro) ---
+// --- DEFINIÇÃO DAS 65 COLUNAS MAPEADAS DO META-METRICS ---
 export const getColumns = (
   level: string = "campanhas",
 ): ColumnDef<MetaCampaign>[] => [
   // ==============================
-  // 1. COLUNAS FIXAS
+  // COLUNAS FIXAS DO SISTEMA
+  // ==============================
+  // ==============================
+  // COLUNAS FIXAS DO SISTEMA
   // ==============================
   {
     id: "select",
@@ -74,7 +80,7 @@ export const getColumns = (
         }
         onCheckedChange={(value) => table.toggleAllPageRowsSelected(!!value)}
         aria-label="Select all"
-        className="translate-y-[2px]"
+        className="translate-y-[2px] data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600 text-white"
       />
     ),
     cell: ({ row }) => (
@@ -82,12 +88,12 @@ export const getColumns = (
         checked={row.getIsSelected()}
         onCheckedChange={(value) => row.toggleSelected(!!value)}
         aria-label="Select row"
-        className="translate-y-[2px]"
+        className="translate-y-[2px] data-[state=checked]:bg-blue-600 data-[state=checked]:border-blue-600 text-white"
       />
     ),
     enableSorting: false,
     enableHiding: false,
-    size: 40, // Largura fixa pequena
+    size: 40,
   },
   {
     accessorKey: "status",
@@ -97,41 +103,46 @@ export const getColumns = (
       const isActive = status === "ACTIVE" || status === true;
       return (
         <div className="flex items-center">
-          <Switch checked={isActive} />
+          <Switch
+            checked={isActive}
+            // O "!bg-white" força a bolinha a ficar branca e esmaga as regras do dark mode do componente base
+            className="data-[state=checked]:bg-blue-600 [&>span]:!bg-white"
+          />
         </div>
       );
     },
     size: 80,
   },
+
+  // ==============================
+  // CAMPANHA & CONFIGURAÇÃO
+  // ==============================
   {
     accessorKey: "name",
-    // Header dinâmico baseado no nível (Campanha, Conjunto, Anúncio)
     header:
-      level === "conjuntos"
-        ? "Conjunto"
-        : level === "anuncios"
-          ? "Anúncio"
-          : "Campanha",
-    cell: ({ row }) => (
-      <div className="flex flex-col">
-        <span
-          className="font-medium text-foreground text-sm truncate max-w-[300px]"
-          title={row.getValue("name")}
-        >
-          {row.getValue("name")}
-        </span>
-        {/*         <span className="text-[10px] text-muted-foreground">
-          {row.original.id}
-        </span> */}
-      </div>
-    ),
+      level === "contas"
+        ? "Conta"
+        : level === "conjuntos"
+          ? "Conjunto"
+          : level === "anuncios"
+            ? "Anúncio"
+            : "Campanha",
+    cell: ({ row }) => {
+      const nameValue = row.getValue("name") as string;
+      return (
+        <div className="flex flex-col">
+          <span
+            className="font-medium text-foreground text-sm truncate max-w-[300px]"
+            title={nameValue}
+          >
+            {nameValue}
+          </span>
+        </div>
+      );
+    },
     size: 300,
     minSize: 200,
   },
-
-  // ==============================
-  // 2. FINANCEIRO & PERFORMANCE
-  // ==============================
   {
     accessorKey: "budget",
     header: () => (
@@ -148,6 +159,75 @@ export const getColumns = (
     size: 120,
   },
   {
+    accessorKey: "bid_cap",
+    header: () => (
+      <HeaderWithTooltip title="Bid Cap" tooltip="Limite de lance." />
+    ),
+    cell: ({ row }) => <div>{formatCurrency(row.getValue("bid_cap"))}</div>,
+    size: 100,
+  },
+  {
+    accessorKey: "account_status",
+    header: "Status da Conta",
+    cell: ({ row }) => (
+      <div>{(row.getValue("account_status") as string) || "-"}</div>
+    ),
+    size: 120,
+  },
+  {
+    accessorKey: "cycle",
+    header: "Ciclo",
+    cell: ({ row }) => <div>{(row.getValue("cycle") as string) || "-"}</div>,
+    size: 100,
+  },
+  {
+    accessorKey: "card",
+    header: "Cartão",
+    cell: ({ row }) => (
+      <div className="text-xs">{(row.getValue("card") as string) || "-"}</div>
+    ),
+    size: 100,
+  },
+  {
+    accessorKey: "id",
+    header: "ID",
+    cell: ({ row }) => (
+      <div className="text-xs text-muted-foreground">
+        {row.getValue("id") as string}
+      </div>
+    ),
+    size: 130,
+  },
+  {
+    accessorKey: "last_update",
+    header: "Última Atual.",
+    cell: ({ row }) => (
+      <div className="text-xs text-muted-foreground">
+        {(row.getValue("last_update") as string) || "-"}
+      </div>
+    ),
+    size: 130,
+  },
+  {
+    accessorKey: "meta_tax",
+    header: () => (
+      <HeaderWithTooltip
+        title="Impostos Meta"
+        tooltip="Impostos cobrados pela plataforma."
+      />
+    ),
+    cell: ({ row }) => (
+      <div className="text-right text-red-400">
+        {formatCurrency(row.getValue("meta_tax"))}
+      </div>
+    ),
+    size: 120,
+  },
+
+  // ==============================
+  // FINANCEIRO & PERFORMANCE
+  // ==============================
+  {
     accessorKey: "spent",
     header: () => (
       <HeaderWithTooltip
@@ -163,16 +243,76 @@ export const getColumns = (
     size: 110,
   },
   {
+    accessorKey: "total_spent",
+    header: () => (
+      <HeaderWithTooltip
+        title="Total Gasto"
+        tooltip="Gasto total incluindo taxas."
+      />
+    ),
+    cell: ({ row }) => (
+      <div className="text-right font-medium text-red-500/80">
+        {formatCurrency(row.getValue("total_spent"))}
+      </div>
+    ),
+    size: 110,
+  },
+  {
     accessorKey: "revenue",
     header: () => (
       <HeaderWithTooltip
-        title="Faturamento"
-        tooltip="Receita total gerada pelas conversões."
+        title="Faturamento (Receita)"
+        tooltip="Receita total confirmada."
       />
     ),
     cell: ({ row }) => (
       <div className="text-right font-medium text-emerald-500">
         {formatCurrency(row.getValue("revenue"))}
+      </div>
+    ),
+    size: 120,
+  },
+  {
+    accessorKey: "gross_revenue",
+    header: () => (
+      <HeaderWithTooltip
+        title="Fat. Bruto"
+        tooltip="Faturamento bruto total."
+      />
+    ),
+    cell: ({ row }) => (
+      <div className="text-right font-medium text-emerald-500">
+        {formatCurrency(row.getValue("gross_revenue"))}
+      </div>
+    ),
+    size: 120,
+  },
+  {
+    accessorKey: "pending_revenue",
+    header: () => (
+      <HeaderWithTooltip
+        title="Fat. Pendente"
+        tooltip="Boletos e Pix aguardando pagamento."
+      />
+    ),
+    cell: ({ row }) => (
+      <div className="text-right font-medium text-muted-foreground">
+        {formatCurrency(row.getValue("pending_revenue"))}
+      </div>
+    ),
+    size: 120,
+  },
+  {
+    accessorKey: "refunded_revenue",
+    header: () => (
+      <HeaderWithTooltip
+        title="Fat. Reembolsado"
+        tooltip="Valor de vendas estornadas."
+      />
+    ),
+    cell: ({ row }) => (
+      <div className="text-right font-medium text-red-400">
+        {formatCurrency(row.getValue("refunded_revenue"))}
       </div>
     ),
     size: 120,
@@ -186,12 +326,10 @@ export const getColumns = (
       />
     ),
     cell: ({ row }) => {
-      const val = row.getValue("profit") as number;
+      const val = Number(row.getValue("profit"));
       return (
         <div
-          className={`text-right font-bold ${
-            val >= 0 ? "text-emerald-500" : "text-red-500"
-          }`}
+          className={`text-right font-bold ${val >= 0 ? "text-emerald-500" : "text-red-500"}`}
         >
           {formatCurrency(val)}
         </div>
@@ -202,22 +340,15 @@ export const getColumns = (
   {
     accessorKey: "roas",
     header: () => (
-      <HeaderWithTooltip
-        title="ROAS"
-        tooltip="Retorno sobre Ad Spend (Receita / Gasto)."
-      />
+      <HeaderWithTooltip title="ROAS" tooltip="Retorno sobre Ad Spend." />
     ),
     cell: ({ row }) => {
-      const val = row.getValue("roas") as number;
+      const val = Number(row.getValue("roas"));
       return (
         <div
-          className={`text-center font-bold px-2 py-0.5 rounded ${
-            val >= 2
-              ? "bg-emerald-500/10 text-emerald-500"
-              : "bg-yellow-500/10 text-yellow-600"
-          }`}
+          className={`text-center font-bold px-2 py-0.5 rounded ${val >= 2 ? "bg-emerald-500/10 text-emerald-500" : "bg-yellow-500/10 text-yellow-600"}`}
         >
-          {val?.toFixed(2)}
+          {val ? val.toFixed(2) : "-"}
         </div>
       );
     },
@@ -226,24 +357,15 @@ export const getColumns = (
   {
     accessorKey: "roi",
     header: () => (
-      <HeaderWithTooltip
-        title="ROI"
-        tooltip="Retorno sobre Investimento (incluindo custos de produto)."
-      />
+      <HeaderWithTooltip title="ROI" tooltip="Retorno sobre Investimento." />
     ),
     cell: ({ row }) => {
-      const val = row.getValue("roi") as number;
+      const val = Number(row.getValue("roi"));
       return (
         <div
-          className={`text-center font-bold px-2 py-0.5 rounded ${
-            // 🔥 Lógica de Cor: Se ROI maior que 1.2 fica verde, senão amarelo
-            // Você pode alterar esse "1.2" para "1" ou "0" conforme sua regra de negócio
-            val >= 1.2
-              ? "bg-emerald-500/10 text-emerald-500"
-              : "bg-yellow-500/10 text-yellow-600"
-          }`}
+          className={`text-center font-bold px-2 py-0.5 rounded ${val >= 1.2 ? "bg-emerald-500/10 text-emerald-500" : "bg-yellow-500/10 text-yellow-600"}`}
         >
-          {val?.toFixed(2)}
+          {val ? val.toFixed(2) : "-"}
         </div>
       );
     },
@@ -253,8 +375,8 @@ export const getColumns = (
     accessorKey: "margin",
     header: () => (
       <HeaderWithTooltip
-        title="Margem"
-        tooltip="Porcentagem de lucro sobre a receita."
+        title="Margem (%)"
+        tooltip="Margem de lucro sobre receita."
       />
     ),
     cell: ({ row }) => (
@@ -274,16 +396,11 @@ export const getColumns = (
   },
 
   // ==============================
-  // 3. CUSTOS (CPA, CPC, ETC)
+  // CUSTOS
   // ==============================
   {
     accessorKey: "cpa",
-    header: () => (
-      <HeaderWithTooltip
-        title="CPA"
-        tooltip="Custo por Ação (Custo por Compra)."
-      />
-    ),
+    header: "CPA",
     cell: ({ row }) => (
       <div className="text-right">{formatCurrency(row.getValue("cpa"))}</div>
     ),
@@ -291,12 +408,7 @@ export const getColumns = (
   },
   {
     accessorKey: "cpc",
-    header: () => (
-      <HeaderWithTooltip
-        title="CPC"
-        tooltip="Custo médio por Clique no link."
-      />
-    ),
+    header: "CPC",
     cell: ({ row }) => (
       <div className="text-right text-xs">
         {formatCurrency(row.getValue("cpc"))}
@@ -306,9 +418,7 @@ export const getColumns = (
   },
   {
     accessorKey: "cpm",
-    header: () => (
-      <HeaderWithTooltip title="CPM" tooltip="Custo por 1.000 Impressões." />
-    ),
+    header: "CPM",
     cell: ({ row }) => (
       <div className="text-right text-xs">
         {formatCurrency(row.getValue("cpm"))}
@@ -317,73 +427,80 @@ export const getColumns = (
     size: 80,
   },
   {
-    accessorKey: "cpl",
-    header: () => (
-      <HeaderWithTooltip title="CPL" tooltip="Custo por Lead (Cadastro)." />
-    ),
-    cell: ({ row }) => (
-      <div className="text-right">{formatCurrency(row.getValue("cpl"))}</div>
-    ),
-    size: 100,
-  },
-  {
-    accessorKey: "cpi",
-    header: () => (
-      <HeaderWithTooltip
-        title="CPI"
-        tooltip="Custo por Iniciação de Compra (Checkout)."
-      />
-    ),
-    cell: ({ row }) => (
-      <div className="text-right">{formatCurrency(row.getValue("cpi"))}</div>
-    ),
-    size: 110,
-  },
-  {
     accessorKey: "cpp",
-    header: () => (
-      <HeaderWithTooltip title="CPP" tooltip="Custo por Venda Pendente." />
-    ),
+    header: "CPP",
     cell: ({ row }) => (
       <div className="text-right">{formatCurrency(row.getValue("cpp"))}</div>
     ),
-    size: 100,
+    size: 90,
+  },
+  {
+    accessorKey: "cpt",
+    header: "CPT",
+    cell: ({ row }) => (
+      <div className="text-right">{formatCurrency(row.getValue("cpt"))}</div>
+    ),
+    size: 90,
+  },
+  {
+    accessorKey: "cpl",
+    header: "CPL",
+    cell: ({ row }) => (
+      <div className="text-right">{formatCurrency(row.getValue("cpl"))}</div>
+    ),
+    size: 90,
+  },
+  {
+    accessorKey: "cpi",
+    header: "CPI",
+    cell: ({ row }) => (
+      <div className="text-right">{formatCurrency(row.getValue("cpi"))}</div>
+    ),
+    size: 90,
+  },
+  {
+    accessorKey: "cost_per_ic",
+    header: "Custo IC",
+    cell: ({ row }) => (
+      <div className="text-right">
+        {formatCurrency(row.getValue("cost_per_ic"))}
+      </div>
+    ),
+    size: 90,
+  },
+  {
+    accessorKey: "cost_per_purchase_init",
+    header: "Custo Init Check.",
+    cell: ({ row }) => (
+      <div className="text-right">
+        {formatCurrency(row.getValue("cost_per_purchase_init"))}
+      </div>
+    ),
+    size: 120,
   },
   {
     accessorKey: "cpv",
-    header: () => (
-      <HeaderWithTooltip
-        title="CPV"
-        tooltip="Custo por Visualização de Página."
-      />
-    ),
+    header: "CPV",
     cell: ({ row }) => (
       <div className="text-right">{formatCurrency(row.getValue("cpv"))}</div>
     ),
-    size: 80,
+    size: 90,
   },
   {
     accessorKey: "cps",
-    header: () => (
-      <HeaderWithTooltip
-        title="CPS"
-        tooltip="Custo por Seguidor no Instagram."
-      />
-    ),
+    header: "CPS",
     cell: ({ row }) => (
       <div className="text-right">{formatCurrency(row.getValue("cps"))}</div>
     ),
-    size: 110,
+    size: 90,
   },
 
   // ==============================
-  // 4. CONVERSÕES
+  // CONVERSÕES
   // ==============================
   {
     accessorKey: "sales",
-    header: () => (
-      <HeaderWithTooltip title="Vendas" tooltip="Compras confirmadas." />
-    ),
+    header: "Vendas",
     cell: ({ row }) => (
       <div className="text-center font-semibold">
         {formatNumber(row.getValue("sales"))}
@@ -393,12 +510,7 @@ export const getColumns = (
   },
   {
     accessorKey: "sales_pending",
-    header: () => (
-      <HeaderWithTooltip
-        title="Vendas (P)"
-        tooltip="Compras aguardando pagamento (Boleto/Pix)."
-      />
-    ),
+    header: "Vendas (P)",
     cell: ({ row }) => (
       <div className="text-center text-muted-foreground">
         {formatNumber(row.getValue("sales_pending"))}
@@ -408,12 +520,7 @@ export const getColumns = (
   },
   {
     accessorKey: "sales_total",
-    header: () => (
-      <HeaderWithTooltip
-        title="Vendas Totais"
-        tooltip="Soma de vendas pagas e pendentes."
-      />
-    ),
+    header: "Vendas Totais",
     cell: ({ row }) => (
       <div className="text-center">
         {formatNumber(row.getValue("sales_total"))}
@@ -422,64 +529,94 @@ export const getColumns = (
     size: 100,
   },
   {
-    accessorKey: "leads",
-    header: () => (
-      <HeaderWithTooltip title="Leads" tooltip="Cadastros realizados." />
-    ),
+    accessorKey: "sales_rejected",
+    header: "Vendas Recusadas",
     cell: ({ row }) => (
-      <div className="text-center">{formatNumber(row.getValue("leads"))}</div>
+      <div className="text-center text-red-500">
+        {formatNumber(row.getValue("sales_rejected"))}
+      </div>
+    ),
+    size: 110,
+  },
+  {
+    accessorKey: "sales_refunded",
+    header: "Vendas Reemb.",
+    cell: ({ row }) => (
+      <div className="text-center text-red-400">
+        {formatNumber(row.getValue("sales_refunded"))}
+      </div>
+    ),
+    size: 110,
+  },
+  {
+    accessorKey: "purchase_init",
+    header: "IC",
+    cell: ({ row }) => (
+      <div className="text-center">
+        {formatNumber(row.getValue("purchase_init"))}
+      </div>
+    ),
+    size: 80,
+  },
+  {
+    accessorKey: "ic_rate",
+    header: "Taxa IC",
+    cell: ({ row }) => (
+      <div className="text-center">
+        {formatPercent(row.getValue("ic_rate"))}
+      </div>
     ),
     size: 90,
   },
   {
     accessorKey: "atc",
-    header: () => (
-      <HeaderWithTooltip
-        title="ATC"
-        tooltip="Adições ao Carrinho (Add to Cart)."
-      />
-    ),
+    header: "ATC",
     cell: ({ row }) => (
       <div className="text-center">{formatNumber(row.getValue("atc"))}</div>
     ),
     size: 80,
   },
   {
-    accessorKey: "ic", // ID 'ic' ou 'purchase_init'
-    header: () => (
-      <HeaderWithTooltip
-        title="IC (Checkout)"
-        tooltip="Initiate Checkout (Início de finalização de compra)."
-      />
-    ),
+    accessorKey: "conversations_started",
+    header: "Conversas",
     cell: ({ row }) => (
-      <div className="text-center">{formatNumber(row.getValue("ic"))}</div>
+      <div className="text-center">
+        {formatNumber(row.getValue("conversations_started"))}
+      </div>
+    ),
+    size: 90,
+  },
+  {
+    accessorKey: "leads",
+    header: "Leads",
+    cell: ({ row }) => (
+      <div className="text-center">{formatNumber(row.getValue("leads"))}</div>
     ),
     size: 90,
   },
   {
     accessorKey: "checkout_conversion",
-    header: () => (
-      <HeaderWithTooltip
-        title="Conv. Checkout"
-        tooltip="Taxa de pessoas que compraram após iniciar checkout."
-      />
-    ),
+    header: "Conv. Checkout",
     cell: ({ row }) => (
       <div className="text-center">
         {formatPercent(row.getValue("checkout_conversion"))}
       </div>
     ),
-    size: 120,
+    size: 110,
+  },
+  {
+    accessorKey: "click_conversion",
+    header: "Conv. Cliques",
+    cell: ({ row }) => (
+      <div className="text-center">
+        {formatPercent(row.getValue("click_conversion"))}
+      </div>
+    ),
+    size: 110,
   },
   {
     accessorKey: "purchase_conversion",
-    header: () => (
-      <HeaderWithTooltip
-        title="Taxa Conv."
-        tooltip="Vendas divididas por visualizações de página."
-      />
-    ),
+    header: "Taxa Conv.",
     cell: ({ row }) => (
       <div className="text-center font-bold">
         {formatPercent(row.getValue("purchase_conversion"))}
@@ -489,13 +626,11 @@ export const getColumns = (
   },
 
   // ==============================
-  // 5. ENGAJAMENTO & TRÁFEGO
+  // ENGAJAMENTO
   // ==============================
   {
     accessorKey: "clicks",
-    header: () => (
-      <HeaderWithTooltip title="Cliques" tooltip="Cliques no link (todos)." />
-    ),
+    header: "Cliques",
     cell: ({ row }) => (
       <div className="text-center">{formatNumber(row.getValue("clicks"))}</div>
     ),
@@ -503,12 +638,7 @@ export const getColumns = (
   },
   {
     accessorKey: "ctr",
-    header: () => (
-      <HeaderWithTooltip
-        title="CTR"
-        tooltip="Click Through Rate (Cliques / Impressões)."
-      />
-    ),
+    header: "CTR",
     cell: ({ row }) => (
       <div className="text-center">{formatPercent(row.getValue("ctr"))}</div>
     ),
@@ -516,12 +646,7 @@ export const getColumns = (
   },
   {
     accessorKey: "impressions",
-    header: () => (
-      <HeaderWithTooltip
-        title="Impressões"
-        tooltip="Quantas vezes seus anúncios foram exibidos."
-      />
-    ),
+    header: "Impressões",
     cell: ({ row }) => (
       <div className="text-center text-xs">
         {formatNumber(row.getValue("impressions"))}
@@ -531,27 +656,17 @@ export const getColumns = (
   },
   {
     accessorKey: "frequency",
-    header: () => (
-      <HeaderWithTooltip
-        title="Freq."
-        tooltip="Média de vezes que cada pessoa viu seu anúncio."
-      />
-    ),
+    header: "Freq.",
     cell: ({ row }) => (
       <div className="text-center">
-        {Number(row.getValue("frequency")).toFixed(2)}
+        {Number(row.getValue("frequency") || 0).toFixed(2)}
       </div>
     ),
     size: 80,
   },
   {
     accessorKey: "page_views",
-    header: () => (
-      <HeaderWithTooltip
-        title="Vis. Pág."
-        tooltip="Visualizações da página de destino."
-      />
-    ),
+    header: "Vis. Pág.",
     cell: ({ row }) => (
       <div className="text-center">
         {formatNumber(row.getValue("page_views"))}
@@ -560,13 +675,18 @@ export const getColumns = (
     size: 100,
   },
   {
-    accessorKey: "connection_rate",
-    header: () => (
-      <HeaderWithTooltip
-        title="Taxa Conexão"
-        tooltip="Vis. Pág / Cliques no Link (Qualidade do carregamento)."
-      />
+    accessorKey: "page_view_rate",
+    header: "Taxa Vis. Pág.",
+    cell: ({ row }) => (
+      <div className="text-center">
+        {formatPercent(row.getValue("page_view_rate"))}
+      </div>
     ),
+    size: 110,
+  },
+  {
+    accessorKey: "connection_rate",
+    header: "Taxa Conexão",
     cell: ({ row }) => (
       <div className="text-center">
         {formatPercent(row.getValue("connection_rate"))}
@@ -574,18 +694,33 @@ export const getColumns = (
     ),
     size: 110,
   },
+  {
+    accessorKey: "sales_per_page_view",
+    header: "Vendas/Vis. Pág.",
+    cell: ({ row }) => (
+      <div className="text-center">
+        {formatPercent(row.getValue("sales_per_page_view"))}
+      </div>
+    ),
+    size: 120,
+  },
 
   // ==============================
-  // 6. VÍDEO & RETENÇÃO
+  // VÍDEO & CRIATIVO
   // ==============================
   {
-    accessorKey: "video_hook",
-    header: () => (
-      <HeaderWithTooltip
-        title="Hook (3s)"
-        tooltip="% de pessoas que viram os primeiros 3 segundos."
-      />
+    accessorKey: "video_retention_3s",
+    header: "Retenção 3s",
+    cell: ({ row }) => (
+      <div className="text-center">
+        {formatPercent(row.getValue("video_retention_3s"))}
+      </div>
     ),
+    size: 100,
+  },
+  {
+    accessorKey: "video_hook",
+    header: "Hook (3s)",
     cell: ({ row }) => (
       <div className="text-center">
         {formatPercent(row.getValue("video_hook"))}
@@ -595,9 +730,7 @@ export const getColumns = (
   },
   {
     accessorKey: "video_hold_rate",
-    header: () => (
-      <HeaderWithTooltip title="Hold Rate" tooltip="Retenção média do vídeo." />
-    ),
+    header: "Hold Rate",
     cell: ({ row }) => (
       <div className="text-center">
         {formatPercent(row.getValue("video_hold_rate"))}
@@ -606,28 +739,28 @@ export const getColumns = (
     size: 100,
   },
   {
-    accessorKey: "video_retention_75",
-    header: () => (
-      <HeaderWithTooltip
-        title="Ret. 75%"
-        tooltip="% de pessoas que viram 75% do vídeo."
-      />
-    ),
+    accessorKey: "video_body_conversion",
+    header: "Conv. Body",
     cell: ({ row }) => (
       <div className="text-center">
-        {formatPercent(row.getValue("video_retention_75"))}
+        {formatPercent(row.getValue("video_body_conversion"))}
       </div>
     ),
     size: 100,
   },
   {
-    accessorKey: "video_cta",
-    header: () => (
-      <HeaderWithTooltip
-        title="Vídeo CTA"
-        tooltip="Cliques no link / Vídeos assistidos 75%."
-      />
+    accessorKey: "video_body_retention",
+    header: "Retenção Body",
+    cell: ({ row }) => (
+      <div className="text-center">
+        {formatPercent(row.getValue("video_body_retention"))}
+      </div>
     ),
+    size: 110,
+  },
+  {
+    accessorKey: "video_cta",
+    header: "Vídeo CTA",
     cell: ({ row }) => (
       <div className="text-center">
         {formatPercent(row.getValue("video_cta"))}
@@ -635,54 +768,30 @@ export const getColumns = (
     ),
     size: 100,
   },
-
-  // ==============================
-  // 7. CONFIGURAÇÃO & OUTROS
-  // ==============================
   {
-    accessorKey: "bid_cap",
-    header: () => (
-      <HeaderWithTooltip
-        title="Bid Cap"
-        tooltip="Limite de lance configurado."
-      />
-    ),
-    cell: ({ row }) => <div>{formatCurrency(row.getValue("bid_cap"))}</div>,
-    size: 100,
-  },
-  {
-    accessorKey: "account_status",
-    header: () => (
-      <HeaderWithTooltip
-        title="Status Conta"
-        tooltip="Status atual da conta de anúncios."
-      />
-    ),
-    cell: ({ row }) => <div>{row.getValue("account_status")}</div>,
-    size: 120,
-  },
-  {
-    accessorKey: "cycle",
-    header: "Ciclo",
-    cell: ({ row }) => <div>{row.getValue("cycle")}</div>,
-    size: 100,
-  },
-  {
-    accessorKey: "card",
-    header: "Cartão",
-    cell: ({ row }) => <div className="text-xs">{row.getValue("card")}</div>,
-    size: 100,
-  },
-  {
-    accessorKey: "last_update",
-    header: "Atualização",
+    accessorKey: "video_play_rate_hook",
+    header: "Play Rate Hook",
     cell: ({ row }) => (
-      <div className="text-xs text-muted-foreground">
-        {row.getValue("last_update")}
+      <div className="text-center">
+        {formatPercent(row.getValue("video_play_rate_hook"))}
       </div>
     ),
-    size: 130,
+    size: 110,
   },
+  {
+    accessorKey: "video_retention_75",
+    header: "Retenção 75%",
+    cell: ({ row }) => (
+      <div className="text-center">
+        {formatPercent(row.getValue("video_retention_75"))}
+      </div>
+    ),
+    size: 110,
+  },
+
+  // ==============================
+  // OUTROS
+  // ==============================
   {
     accessorKey: "followers",
     header: "Seguidores",
@@ -694,16 +803,39 @@ export const getColumns = (
     size: 100,
   },
   {
-    accessorKey: "creation_date",
-    header: "Data Criação",
+    accessorKey: "product_costs",
+    header: "Custos Produto",
     cell: ({ row }) => (
-      <div className="text-xs text-muted-foreground">
-        {row.getValue("creation_date")}
+      <div className="text-right text-red-400">
+        {formatCurrency(row.getValue("product_costs"))}
       </div>
     ),
     size: 120,
   },
+  {
+    accessorKey: "ca",
+    header: "CA",
+    cell: ({ row }) => <div>{(row.getValue("ca") as string) || "-"}</div>,
+    size: 100,
+  },
+  {
+    accessorKey: "creation_date",
+    header: "Criação",
+    cell: ({ row }) => (
+      <div className="text-xs text-muted-foreground">
+        {(row.getValue("creation_date") as string) || "-"}
+      </div>
+    ),
+    size: 120,
+  },
+  {
+    accessorKey: "delivery_status",
+    header: "Veiculação",
+    cell: ({ row }) => (
+      <div>{(row.getValue("delivery_status") as string) || "-"}</div>
+    ),
+    size: 110,
+  },
 ];
 
-// Compatibilidade para quando importar 'columns' diretamente sem função
 export const columns = getColumns("campanhas");

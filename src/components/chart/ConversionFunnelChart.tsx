@@ -1,16 +1,54 @@
 "use client";
 
 import React, { useEffect, useState } from "react";
+// @ts-ignore
 import "funnel-graph-js/dist/css/main.min.css";
+// @ts-ignore
 import "funnel-graph-js/dist/css/theme.min.css";
+import { cn } from "@/lib/utils";
 
-export default function ConversionFunnelChart() {
+export interface FunnelData {
+  clicks?: number;
+  pageViews?: number;
+  addToCart?: number;
+  initiateCheckout?: number;
+  vendasIniciadas?: number;
+  vendasAprovadas?: number;
+}
+
+interface ConversionFunnelChartProps {
+  funnelData?: FunnelData;
+  isEcommerce?: boolean;
+}
+
+export default function ConversionFunnelChart({
+  funnelData,
+  isEcommerce = true,
+}: ConversionFunnelChartProps) {
   const [funnelId] = useState(
     () => `funnel-${Math.random().toString(36).substring(2, 9)}`,
   );
 
-  // Troque para false para testar o modo Infoproduto
-  const isEcommerce = true;
+  // 🔥 DETECTOR DE VAZIO
+  const rawValues = isEcommerce
+    ? [
+        funnelData?.clicks || 0,
+        funnelData?.pageViews || 0,
+        funnelData?.addToCart || 0,
+        funnelData?.initiateCheckout || 0,
+        funnelData?.vendasIniciadas || 0,
+        funnelData?.vendasAprovadas || 0,
+      ]
+    : [
+        funnelData?.clicks || 0,
+        funnelData?.pageViews || 0,
+        funnelData?.initiateCheckout || 0,
+        funnelData?.vendasIniciadas || 0,
+        funnelData?.vendasAprovadas || 0,
+      ];
+
+  const maxVal = Math.max(...rawValues);
+  const isEmpty = maxVal === 0;
 
   useEffect(() => {
     const containerElement = document.getElementById(funnelId);
@@ -20,13 +58,13 @@ export default function ConversionFunnelChart() {
 
     const drawFunnel = async () => {
       try {
+        // @ts-ignore
         const FunnelGraphModule = await import("funnel-graph-js");
         const FunnelGraph = FunnelGraphModule.default || FunnelGraphModule;
 
         const parent = containerElement.parentElement;
         if (!parent) return;
 
-        // Lemos o tamanho total do card
         const w = parent.clientWidth;
         const h = parent.clientHeight;
 
@@ -45,17 +83,13 @@ export default function ConversionFunnelChart() {
             ]
           : ["Cliques", "Vis. Página", "ICs", "Vendas Inic.", "Vendas Apr."];
 
-        // 🔥 ATENÇÃO AOS DADOS: Quedas muito bruscas (ex: 100 para 6) podem gerar curvas estranhas.
-        // A biblioteca tenta suavizar, mas se ficar feio, pode ser necessário "alisar" os dados reais.
-        const currentValues = isEcommerce
-          ? [100, 85, 50, 30, 10, 5]
-          : [100, 80, 45, 15, 5];
+        // Se estiver vazio, joga "1" para a biblioteca não quebrar
+        const chartValues = isEmpty ? rawValues.map(() => 1) : rawValues;
 
         const data = {
           labels: currentLabels,
           colors: ["#4f46e5", "#9333ea", "#db2777"],
-          //"#4f46e5", "#115bbd", "#00D4FF"
-          values: currentValues,
+          values: chartValues,
         };
 
         const graph = new FunnelGraph({
@@ -64,7 +98,6 @@ export default function ConversionFunnelChart() {
           data: data,
           displayPercent: true,
           direction: "horizontal",
-          // Passamos o tamanho total do pai, o CSS cuidará do padding
           width: w,
           height: h,
         });
@@ -75,16 +108,19 @@ export default function ConversionFunnelChart() {
           const percents =
             containerElement.querySelectorAll(".label__percentage");
           const textValues = containerElement.querySelectorAll(".label__value");
-          const max = Math.max(...currentValues);
 
           percents.forEach((el, i) => {
-            if (currentValues[i] !== undefined) {
-              el.textContent = `${Math.round((currentValues[i] / max) * 100)}%`;
+            if (rawValues[i] !== undefined) {
+              el.textContent = isEmpty
+                ? "0%"
+                : `${Math.round((rawValues[i] / maxVal) * 100)}%`;
             }
           });
+
           textValues.forEach((el, i) => {
-            if (currentValues[i] !== undefined)
-              el.textContent = currentValues[i].toString();
+            if (rawValues[i] !== undefined) {
+              el.textContent = rawValues[i].toString();
+            }
           });
         }, 50);
       } catch (error) {
@@ -105,12 +141,17 @@ export default function ConversionFunnelChart() {
       resizeObserver.disconnect();
       clearTimeout(resizeTimer);
     };
-  }, [funnelId, isEcommerce]);
+  }, [funnelId, isEcommerce, funnelData, isEmpty]); // eslint-disable-line
 
   return (
-    <div className="flex flex-col h-full w-full relative">
+    // 🔥 Envolvemos TUDO com a classe is-funnel-empty baseada na variável isEmpty
+    <div
+      className={cn(
+        "flex flex-col h-full w-full relative",
+        isEmpty && "is-funnel-empty",
+      )}
+    >
       <style>{`
-        /* 🔥 SOLUÇÃO ROBUSTA: Usamos padding no container principal */
         .funnel-container {
           width: 100%;
           height: 100%;
@@ -124,7 +165,12 @@ export default function ConversionFunnelChart() {
           position: relative;
         }
 
-        /* Removemos os hacks antigos que bugavam o SVG */
+        /* 🔥 O TRUQUE MAGNÍFICO: Apagamos o SVG inteiro se estiver vazio, deixando só as divs das linhas e textos */
+        .is-funnel-empty .svg-funnel-js svg {
+          opacity: 0 !important;
+          visibility: hidden !important;
+        }
+
         .svg-funnel-js .svg-funnel-js__container {
           height: 100% !important;
           width: 100% !important;
@@ -135,14 +181,11 @@ export default function ConversionFunnelChart() {
         .svg-funnel-js svg {
           width: 100%;
           height: 100%;
-          /* Garante renderização suave */
           shape-rendering: geometricPrecision;
         }
 
-        /* 🔥 HACK DAS LABELS: Elas precisam ignorar o padding do pai para encostar nas bordas */
         .svg-funnel-js .svg-funnel-js__labels {
           position: absolute !important;
-          /* Usamos margens negativas para "furar" o padding de 35px do .funnel-container */
           top: -20px;
           bottom: -20px;
           left: 0; right: 0;
@@ -160,14 +203,12 @@ export default function ConversionFunnelChart() {
           justify-content: center;
           position: relative;
           border-left: 1px solid rgba(204, 204, 204, 0.25) !important; 
-          #9896DC
         }
         .svg-funnel-js .svg-funnel-js__label:first-child { border-left: none !important; }
 
-        /* Ajuste fino da posição dos textos */
         .svg-funnel-js .label__title {
           position: absolute;
-          top: 5px; /* Um pouco mais perto da borda */
+          top: 5px; 
           font-size: 13px !important;
           font-weight: 600 !important;
           color: hsl(var(--muted-foreground)) !important;
@@ -184,7 +225,7 @@ export default function ConversionFunnelChart() {
 
         .svg-funnel-js .label__value {
           position: absolute;
-          bottom: 5px; /* Um pouco mais perto da borda */
+          bottom: 5px; 
           font-size: 14px !important;
           font-weight: 600 !important;
           color: hsl(var(--muted-foreground)) !important;

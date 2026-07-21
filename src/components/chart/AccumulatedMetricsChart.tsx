@@ -6,6 +6,7 @@ import {
   LineChart,
   CartesianGrid,
   XAxis,
+  YAxis,
   ResponsiveContainer,
 } from "recharts";
 import {
@@ -15,51 +16,60 @@ import {
   type ChartConfig,
 } from "@/components/ui/chart";
 
-const dataLiquido = [
-  { hour: "00:00", inv: 0, fat: 0, luc: 0 },
-  { hour: "04:00", inv: 0, fat: 0, luc: 0 },
-  { hour: "05:00", inv: 15.5, fat: 59.98, luc: 44.48 },
-  { hour: "06:00", inv: 25.0, fat: 59.98, luc: 34.98 },
-  { hour: "08:00", inv: 40.0, fat: 120.0, luc: 80.0 },
-  { hour: "10:00", inv: 65.0, fat: 240.0, luc: 175.0 },
-  { hour: "14:00", inv: 110.0, fat: 380.0, luc: 270.0 },
-  { hour: "18:00", inv: 150.0, fat: 510.0, luc: 360.0 },
-  { hour: "23:00", inv: 180.0, fat: 650.0, luc: 470.0 },
-];
+interface AccumulatedData {
+  hour: string;
+  grossRevenue: number;
+  netRevenue: number;
+  grossProfit: number;
+  netProfit: number;
+  investment: number;
+}
 
-const dataBruto = [
-  { hour: "00:00", inv: 0, fat: 0, luc: 0 },
-  { hour: "04:00", inv: 0, fat: 0, luc: 0 },
-  { hour: "05:00", inv: 15.5, fat: 80.0, luc: 64.5 },
-  { hour: "06:00", inv: 25.0, fat: 80.0, luc: 55.0 },
-  { hour: "08:00", inv: 40.0, fat: 160.0, luc: 120.0 },
-  { hour: "10:00", inv: 65.0, fat: 300.0, luc: 235.0 },
-  { hour: "14:00", inv: 110.0, fat: 450.0, luc: 340.0 },
-  { hour: "18:00", inv: 150.0, fat: 600.0, luc: 450.0 },
-  { hour: "23:00", inv: 180.0, fat: 800.0, luc: 620.0 },
-];
+interface AccumulatedMetricsChartProps {
+  chartData?: AccumulatedData[];
+  viewMode?: string;
+}
 
 const chartConfig = {
-  inv: { label: "Investimento", color: "#f59e0b" },
-  fat: { label: "Faturamento", color: "#3b82f6" },
-  luc: { label: "Lucro", color: "#10b981" },
+  investimento: { label: "Investimento", color: "#f59e0b" },
+  faturamento: { label: "Faturamento", color: "#3b82f6" },
+  lucro: { label: "Lucro", color: "#10b981" },
 } satisfies ChartConfig;
 
-// 🔥 NOVO: Agora o gráfico SÓ recebe a ordem
 export default function AccumulatedMetricsChart({
+  chartData = [],
   viewMode = "liquido",
-}: {
-  viewMode?: string;
-}) {
-  const currentData = viewMode === "liquido" ? dataLiquido : dataBruto;
+}: AccumulatedMetricsChartProps) {
+  const processedData = chartData.map((item) => ({
+    hour: item.hour,
+    investimento: item.investment || 0,
+    faturamento: viewMode === "liquido" ? item.netRevenue : item.grossRevenue,
+    lucro: viewMode === "liquido" ? item.netProfit : item.grossProfit,
+  }));
 
   return (
-    <div className="flex-1 w-full h-full min-h-[200px] flex flex-col relative">
-      <ChartContainer config={chartConfig} className="w-full h-full">
+    <div className="flex-1 w-full h-full min-h-[200px] flex flex-col relative mt-2">
+      {/* 🔥 PONTO 3: LEGENDA VISUAL IGUAL À REFERÊNCIA */}
+      <div className="flex items-center justify-center gap-6 mb-3 shrink-0">
+        {Object.entries(chartConfig).map(([key, config]) => (
+          <div key={key} className="flex items-center gap-1.5">
+            <div
+              className="w-2.5 h-2.5 rounded-xs"
+              style={{ backgroundColor: config.color }}
+            />
+            <span className="text-xs text-muted-foreground font-medium">
+              {config.label}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      {/* 🔥 A MÁGICA ACONTECE AQUI: flex-1 e min-h-0 no lugar do h-full */}
+      <ChartContainer config={chartConfig} className="w-full flex-1 min-h-0">
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
-            data={currentData}
-            margin={{ top: 25, right: 10, left: 10, bottom: 0 }}
+            data={processedData}
+            margin={{ top: 10, right: 10, left: 10, bottom: 10 }}
           >
             <CartesianGrid
               vertical={false}
@@ -67,40 +77,60 @@ export default function AccumulatedMetricsChart({
               strokeDasharray="3 3"
               opacity={0.2}
             />
+
+            <YAxis
+              tickLine={false}
+              axisLine={false}
+              tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
+              tickFormatter={(value: number) =>
+                // 🔥 Usamos \u00A0 (non-breaking space) para impedir que o R$ separe do número
+                `R$\u00A0${value.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+              }
+            />
+
             <XAxis
               dataKey="hour"
               tickLine={false}
-              tickMargin={10}
+              tickMargin={12}
               axisLine={false}
               tick={{ fill: "hsl(var(--muted-foreground))", fontSize: 10 }}
               interval="preserveStartEnd"
             />
+
             <ChartTooltip
               cursor={{
                 stroke: "hsl(var(--accent))",
                 strokeWidth: 2,
-                strokeDasharray: "3 3",
+                opacity: 0.4,
               }}
               content={
                 <ChartTooltipContent
-                  className="w-[220px]"
-                  formatter={(value: any, name: any) => {
-                    const key = name as keyof typeof chartConfig;
-                    const label = chartConfig[key]?.label || name;
-                    const color =
-                      chartConfig[key]?.color || "hsl(var(--primary))";
+                  className="w-[200px]"
+                  formatter={(value: string | number, name: string) => {
+                    const numericValue = Number(value);
+
+                    // 🔥 PONTO 2: Pegando a cor real do chartConfig dinamicamente!
+                    const colorHex =
+                      chartConfig[name as keyof typeof chartConfig]?.color ||
+                      "#000";
 
                     return (
-                      <div className="flex w-full justify-between items-center gap-2">
-                        <div className="flex items-center gap-2">
+                      <div className="flex w-full items-center justify-between gap-2">
+                        <div className="flex items-center gap-2 shrink-0">
                           <div
-                            className="w-2.5 h-2.5 rounded-[2px]"
-                            style={{ backgroundColor: color }}
+                            className="w-2.5 h-2.5 rounded-xs"
+                            style={{ backgroundColor: colorHex }} // Aplica a cor aqui
                           />
-                          <span className="text-muted-foreground">{label}</span>
+                          <span className="text-muted-foreground whitespace-nowrap capitalize">
+                            {name}
+                          </span>
                         </div>
-                        <span className="font-mono font-medium tabular-nums text-foreground">
-                          R$ {Number(value).toFixed(2).replace(".", ",")}
+                        <span className="font-bold whitespace-nowrap tabular-nums">
+                          R${" "}
+                          {numericValue.toLocaleString("pt-BR", {
+                            minimumFractionDigits: 2,
+                            maximumFractionDigits: 2,
+                          })}
                         </span>
                       </div>
                     );
@@ -108,29 +138,32 @@ export default function AccumulatedMetricsChart({
                 />
               }
             />
+
             <Line
               type="monotone"
-              dataKey="inv"
-              stroke="var(--color-inv)"
+              dataKey="investimento"
+              stroke="var(--color-investimento)"
               strokeWidth={2}
-              dot={{ r: 4, fill: "var(--color-inv)" }}
-              activeDot={{ r: 6 }}
+              dot={{ r: 3, fill: "var(--color-investimento)" }}
+              activeDot={{ r: 5 }}
             />
+
             <Line
               type="monotone"
-              dataKey="fat"
-              stroke="var(--color-fat)"
+              dataKey="faturamento"
+              stroke="var(--color-faturamento)"
               strokeWidth={2}
-              dot={{ r: 4, fill: "var(--color-fat)" }}
-              activeDot={{ r: 6 }}
+              dot={{ r: 3, fill: "var(--color-faturamento)" }}
+              activeDot={{ r: 5 }}
             />
+
             <Line
               type="monotone"
-              dataKey="luc"
-              stroke="var(--color-luc)"
+              dataKey="lucro"
+              stroke="var(--color-lucro)"
               strokeWidth={2}
-              dot={{ r: 4, fill: "var(--color-luc)" }}
-              activeDot={{ r: 6 }}
+              dot={{ r: 3, fill: "var(--color-lucro)" }}
+              activeDot={{ r: 5 }}
             />
           </LineChart>
         </ResponsiveContainer>

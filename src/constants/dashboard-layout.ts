@@ -58,7 +58,7 @@ export const DEFAULT_LAYOUT = [
   },
   { id: "arpu", x: 4, y: 6, w: 3, h: 3, minW: 3, maxW: 4, minH: 3, maxH: 3 },
   { id: "margem", x: 7, y: 6, w: 2, h: 3, minW: 2, maxW: 4, minH: 3, maxH: 3 },
-  { id: "imposto", x: 9, y: 6, w: 3, h: 3, minW: 3, maxW: 4, minH: 3, maxH: 3 },
+  { id: "imposto_total", x: 9, y: 6, w: 3, h: 3, minW: 3, maxW: 4, minH: 3, maxH: 3 },
   {
     id: "reembolso_val",
     x: 4,
@@ -153,7 +153,7 @@ export const DEFAULT_LAYOUT = [
 // 2. O DICIONÁRIO DE TAMANHOS (Para quando arrastar algo da Sidebar)
 const sizeDinheiro = { w: 3, h: 3, minW: 3, maxW: 4, minH: 3, maxH: 3 };
 const sizeEspecif = { w: 2, h: 3, minW: 2, maxW: 4, minH: 3, maxH: 3 };
-const sizeLista = { w: 4, h: 4, minW: 3, maxW: 4, minH: 3, maxH: 18 };
+const sizeLista = { w: 4, h: 4, minW: 3, maxW: 6, minH: 3, maxH: 18 };
 const sizeGrafico = { w: 8, h: 9, minW: 4, maxW: 12, minH: 9, maxH: 18 };
 
 export type CardSizeConfig = {
@@ -173,7 +173,7 @@ export const CARD_SIZES: Record<string, CardSizeConfig> = {
   faturamento_liquido: sizeDinheiro,
   arpu: sizeDinheiro,
   reembolso_val: sizeDinheiro,
-  imposto: sizeDinheiro,
+  imposto_vendas: sizeDinheiro,
   taxas: sizeDinheiro,
   vendas_pendentes: sizeDinheiro,
   despesas_adicionais: sizeDinheiro,

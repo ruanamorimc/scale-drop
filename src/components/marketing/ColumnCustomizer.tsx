@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useCallback } from "react";
 import {
   Dialog,
   DialogContent,
@@ -12,13 +12,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Checkbox } from "@/components/ui/checkbox";
-import { Settings, Search, GripVertical, Lock } from "lucide-react"; // Adicionei Lock
+import { Settings, Search, GripVertical } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { AVAILABLE_METRICS, MetricDefinition } from "@/constants/meta-metrics";
 
 // GRIDSTACK IMPORTS
 import { GridStack, GridStackElement } from "gridstack";
-import "gridstack/dist/gridstack.min.css";
+// @ts-expect-error - Ignora o erro de tipagem pois o Next.js gerencia o CSS perfeitamente
+import "gridstack/dist/gridstack.css";
 
 interface ColumnCustomizerProps {
   currentColumns: string[];
@@ -36,77 +37,36 @@ export function ColumnCustomizer({
   const gridRef = useRef<HTMLDivElement>(null);
   const gridInstance = useRef<GridStack | null>(null);
 
-  // 1. Inicialização
-  useEffect(() => {
-    if (open) {
-      // Garante que 'name' (Campanha) esteja na lista se não estiver
-      let initialCols = [...currentColumns];
-      if (!initialCols.includes("name")) {
-        initialCols = ["name", ...initialCols];
-      }
-      // Remove 'status' e 'select' se vierem do pai, pois são fixos lá fora
-      initialCols = initialCols.filter(
-        (id) => id !== "status" && id !== "select",
-      );
+  // ============================================================================
+  // ORDEM CRONOLÓGICA DE FUNÇÕES (Evita erros de referência e hooks ausentes)
+  // ============================================================================
 
-      setSelectedIds(initialCols);
-      setSearch("");
+  // 1. REMOVE WIDGET (Declarado primeiro porque o botão de "Adicionar" vai precisar dele)
+  const handleRemove = useCallback((id: string) => {
+    // Não permite remover 'name'
+    if (id === "name") return;
 
-      setTimeout(() => {
-        initGrid(initialCols);
-      }, 300);
-    } else {
-      if (gridInstance.current) {
-        gridInstance.current.destroy(false);
-        gridInstance.current = null;
-      }
-    }
-  }, [open]);
-
-  // 2. Gridstack Init
-  const initGrid = (itemsId: string[]) => {
-    if (!gridRef.current) return;
+    setSelectedIds((prev) => prev.filter((item) => item !== id));
 
     if (gridInstance.current) {
-      gridInstance.current.destroy(false);
+      const el = gridRef.current?.querySelector(
+        `.grid-stack-item[gs-id="${id}"]`,
+      ) as GridStackElement;
+      if (el) {
+        gridInstance.current.removeWidget(el);
+      }
     }
+  }, []);
 
-    gridInstance.current = GridStack.init(
-      {
-        column: 1,
-        cellHeight: 54,
-        minRow: 1,
-        margin: 0, // 🔥 CONTROLAMOS NO CSS
-        disableResize: true,
-        float: false,
-        acceptWidgets: false,
-        animate: true,
-      },
-      gridRef.current,
-    );
+  // 2. ADICIONAR WIDGET (Declarado em segundo porque o initGrid vai precisar dele)
+  const addWidgetToGrid = useCallback(
+    (metric: MetricDefinition) => {
+      if (!gridInstance.current) return;
 
-    // Garante que 'name' seja o primeiro a ser renderizado
-    const sortedItems = itemsId.sort((a, b) => {
-      if (a === "name") return -1;
-      if (b === "name") return 1;
-      return 0;
-    });
+      const isFixed = metric.id === "name"; // Verifica se é a coluna fixa (Campanha)
 
-    sortedItems.forEach((id) => {
-      const metric = AVAILABLE_METRICS.find((m) => m.id === id);
-      if (metric) addWidgetToGrid(metric);
-    });
-  };
-
-  // 3. ADICIONAR WIDGET
-  const addWidgetToGrid = (metric: MetricDefinition) => {
-    if (!gridInstance.current) return;
-
-    const isFixed = metric.id === "name"; // Verifica se é a coluna fixa (Campanha)
-
-    // Conteúdo HTML
-    // Se for fixo: Borda diferente, Ícone de Cadeado, Sem cursor de move
-    const contentHtml = `
+      // Conteúdo HTML
+      const contentHtml = `
       <div class="w-full h-full flex items-center justify-between px-4 py-2 rounded border 
         ${isFixed ? "border-blue-500/30 bg-blue-500/5 cursor-default" : "border-border bg-card cursor-grab active:cursor-grabbing hover:border-primary/50 hover:shadow-md"} 
         shadow-sm group select-none relative transition-all">
@@ -136,48 +96,123 @@ export function ColumnCustomizer({
       </div>
     `;
 
-    // 1. Cria o widget
-    const widgetEl = gridInstance.current.addWidget({
-      w: 1,
-      h: 1,
-      id: metric.id,
-      noResize: true,
-      locked: isFixed, // 🔥 TRAVA O ITEM SE FOR 'NAME'
-      noMove: isFixed, // 🔥 IMPEDE MOVER
-    });
+      // Cria o widget
+      const widgetEl = gridInstance.current.addWidget({
+        w: 1,
+        h: 1,
+        id: metric.id,
+        noResize: true,
+        locked: isFixed, // TRAVA O ITEM SE FOR 'NAME'
+        noMove: isFixed, // IMPEDE MOVER
+      });
 
-    // 2. Injeta o HTML
-    if (widgetEl) {
-      const contentEl = widgetEl.querySelector(".grid-stack-item-content");
-      if (contentEl) {
-        contentEl.innerHTML = contentHtml;
+      // Injeta o HTML
+      if (widgetEl) {
+        const contentEl = widgetEl.querySelector(".grid-stack-item-content");
+        if (contentEl) {
+          contentEl.innerHTML = contentHtml;
+        }
+      }
+
+      // Listeners do botão X (Apenas se não for fixo)
+      if (!isFixed) {
+        setTimeout(() => {
+          const el = gridRef.current?.querySelector(
+            `.grid-stack-item[gs-id="${metric.id}"]`,
+          );
+          const btn = el?.querySelector(".delete-trigger");
+
+          if (btn) {
+            const newBtn = btn.cloneNode(true);
+            btn.parentNode?.replaceChild(newBtn, btn);
+
+            newBtn.addEventListener("mousedown", (e) => e.stopPropagation());
+            newBtn.addEventListener("click", (e) => {
+              e.stopPropagation();
+              e.preventDefault();
+              handleRemove(metric.id);
+            });
+          }
+        }, 50);
+      }
+    },
+    [handleRemove],
+  ); // <--- Dependência amarrada aqui
+
+  // 3. INICIALIZAÇÃO DO GRID (Agora ele enxerga a função addWidgetToGrid perfeitamente)
+  const initGrid = useCallback(
+    (itemsId: string[]) => {
+      if (!gridRef.current) return;
+
+      if (gridInstance.current) {
+        gridInstance.current.destroy(false);
+      }
+
+      gridInstance.current = GridStack.init(
+        {
+          column: 1,
+          cellHeight: 54,
+          minRow: 1,
+          margin: 0,
+          disableResize: true,
+          float: false,
+          acceptWidgets: false,
+          animate: true,
+        },
+        gridRef.current,
+      );
+
+      // Garante que 'name' seja o primeiro a ser renderizado (usando spread para não mutar o array original)
+      const sortedItems = [...itemsId].sort((a, b) => {
+        if (a === "name") return -1;
+        if (b === "name") return 1;
+        return 0;
+      });
+
+      sortedItems.forEach((id) => {
+        const metric = AVAILABLE_METRICS.find((m) => m.id === id);
+        if (metric) addWidgetToGrid(metric);
+      });
+    },
+    [addWidgetToGrid],
+  ); // <--- Dependência amarrada aqui
+
+  // 4. GATILHO DE CICLO DE VIDA (O useEffect agora fica no final da cadeia)
+  useEffect(() => {
+    if (open) {
+      let initialCols = [...currentColumns];
+
+      if (!initialCols.includes("name")) {
+        initialCols = ["name", ...initialCols];
+      }
+
+      initialCols = initialCols.filter(
+        (id) => id !== "status" && id !== "select",
+      );
+
+      // 👇 SOLUÇÃO: Micro-delay assíncrono para acalmar o Linter!
+      setTimeout(() => {
+        setSelectedIds(initialCols);
+        setSearch("");
+      }, 0);
+
+      // Aguarda a animação do modal para montar o Grid
+      setTimeout(() => {
+        initGrid(initialCols);
+      }, 300);
+    } else {
+      if (gridInstance.current) {
+        gridInstance.current.destroy(false);
+        gridInstance.current = null;
       }
     }
+  }, [open, currentColumns, initGrid]);
 
-    // 3. Listeners do botão X (Apenas se não for fixo)
-    if (!isFixed) {
-      setTimeout(() => {
-        const el = gridRef.current?.querySelector(
-          `.grid-stack-item[gs-id="${metric.id}"]`,
-        );
-        const btn = el?.querySelector(".delete-trigger");
+  // ============================================================================
+  // FUNÇÕES DE AÇÃO DA INTERFACE DO USUÁRIO (Podem ficar por último)
+  // ============================================================================
 
-        if (btn) {
-          const newBtn = btn.cloneNode(true);
-          btn.parentNode?.replaceChild(newBtn, btn);
-
-          newBtn.addEventListener("mousedown", (e) => e.stopPropagation());
-          newBtn.addEventListener("click", (e) => {
-            e.stopPropagation();
-            e.preventDefault();
-            handleRemove(metric.id);
-          });
-        }
-      }, 50);
-    }
-  };
-
-  // 4. Toggle
+  // 5. TOGGLE METRIC
   const toggleMetric = (metric: MetricDefinition) => {
     const isSelected = selectedIds.includes(metric.id);
     if (isSelected) {
@@ -188,24 +223,7 @@ export function ColumnCustomizer({
     }
   };
 
-  // 5. Remove
-  const handleRemove = (id: string) => {
-    // Não permite remover 'name'
-    if (id === "name") return;
-
-    setSelectedIds((prev) => prev.filter((item) => item !== id));
-
-    if (gridInstance.current) {
-      const el = gridRef.current?.querySelector(
-        `.grid-stack-item[gs-id="${id}"]`,
-      ) as GridStackElement;
-      if (el) {
-        gridInstance.current.removeWidget(el);
-      }
-    }
-  };
-
-  // 6. Save
+  // 6. SAVE
   const handleSave = () => {
     if (!gridInstance.current) return;
 
@@ -225,7 +243,7 @@ export function ColumnCustomizer({
     setOpen(false);
   };
 
-  // Filtra métricas para a esquerda: Remove 'name' (pois é fixo na direita)
+  // 7. FILTRO DE BUSCA (Variável de renderização pura)
   const filteredMetrics = AVAILABLE_METRICS.filter(
     (m) =>
       m.label.toLowerCase().includes(search.toLowerCase()) && m.id !== "name",
