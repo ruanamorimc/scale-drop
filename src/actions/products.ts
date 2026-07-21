@@ -199,3 +199,25 @@ export async function generateTestProducts() {
   revalidatePath("/products");
   return { success: true };
 }
+
+export async function getActiveProducts(userId: string) {
+  try {
+    const products = await prisma.product.findMany({
+      where: {
+        userId: userId,
+        isActive: true, // Traz apenas os produtos ativos
+      },
+      select: {
+        id: true,
+        name: true,
+        sku: true, // O SKU será uma excelente "ponte" para as campanhas
+      },
+      orderBy: { name: "asc" },
+    });
+
+    return products;
+  } catch (error) {
+    console.error("Erro ao buscar produtos ativos:", error);
+    return [];
+  }
+}

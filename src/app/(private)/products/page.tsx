@@ -246,10 +246,12 @@ export default function ProductsPage() {
           </div>
           <Button
             variant="default"
-            onClick={handleRefresh} // 👈 ALTERADO: Agora chama a nova função com Toast
+            onClick={handleRefresh}
             disabled={isLoading}
-            className="text-white bg-blue-600 transition-all duration-300 hover:bg-blue-700 hover:shadow-[0_0_10px_1px_rgba(37,99,235,0.6)] hover:-translate-y-0.5"
+            className="group relative overflow-hidden px-5 py-2 rounded-lg text-white border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 shadow-lg hover:shadow-2xl hover:shadow-blue-500/40 hover:scale-105 active:scale-95 transition-all duration-300 ease-out hover:border-blue-400 flex items-center justify-center"
           >
+            {/* Efeito de Varredura de Luz */}
+            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out"></div>
             <RefreshCw
               className={`mr-2 h-4 w-4 ${isLoading ? "animate-spin" : ""}`}
             />

@@ -30,6 +30,7 @@ export type Product = {
   store: string;
   sku?: string | null;
   externalId?: string | null;
+  supplierUrl?: string | null;
 };
 
 const formatCurrency = (value: number) => {
@@ -44,8 +45,8 @@ const formatCurrency = (value: number) => {
 interface ProductTableMeta {
   fees: Fee[];
   taxes: Tax[];
-  onEdit: (product: any) => void;
-  onDelete: (product: any) => void;
+  onEdit: (product: Product) => void;
+  onDelete: (product: Product) => void;
 }
 
 export const columns: ColumnDef<Product>[] = [
@@ -363,10 +364,7 @@ export const columns: ColumnDef<Product>[] = [
   {
     id: "actions",
     cell: ({ row, table }) => {
-      const meta = table.options.meta as {
-        onEdit: (product: Product) => void;
-        onDelete: (product: Product) => void;
-      };
+      const meta = table.options.meta as ProductTableMeta;
 
       return (
         <div className="flex items-center gap-1">
