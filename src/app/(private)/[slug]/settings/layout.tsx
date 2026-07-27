@@ -7,19 +7,29 @@ export const metadata: Metadata = {
   description: "Gerencie as configurações da sua conta.",
 };
 
-const sidebarNavItems = [
-  { title: "Geral", href: "/settings" },
-  { title: "Segurança", href: "/settings/security" },
-  { title: "Planos e Cobrança", href: "/settings/billing" },
-  { title: "Integrações", href: "/settings/integrations" }, // Nossa futura integração ML
-  { title: "Códigos e Scripts", href: "/settings/scripts" },
-];
-
+// 🔥 1. Adicionamos a tipagem dos parâmetros da URL (params)
 interface SettingsLayoutProps {
   children: React.ReactNode;
+  params: Promise<{ slug: string }>;
 }
 
-export default function SettingsLayout({ children }: SettingsLayoutProps) {
+// 🔥 2. Transformamos o Layout em async para poder usar o await no params
+export default async function SettingsLayout({
+  children,
+  params,
+}: SettingsLayoutProps) {
+  // 🔥 3. Extraímos o slug do Workspace atual
+  const { slug } = await params;
+
+  // 🔥 4. Trazemos o menu para dentro do componente e injetamos o slug nas URLs
+  const sidebarNavItems = [
+    { title: "Geral", href: `/${slug}/settings` },
+    { title: "Segurança", href: `/${slug}/settings/security` },
+    { title: "Planos e Cobrança", href: `/${slug}/settings/billing` },
+    { title: "Integrações", href: `/${slug}/settings/integrations` },
+    { title: "Códigos e Scripts", href: `/${slug}/settings/scripts` },
+  ];
+
   return (
     <div className="hidden space-y-6 p-10 pb-16 md:block">
       <div className="space-y-0.5">

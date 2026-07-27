@@ -1,9 +1,10 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useRouter } from "next/navigation"; // 🔥 IMPORT NOVO PARA O REDIRECIONAMENTO
+import Image from "next/image";
+import { useParams, useRouter } from "next/navigation"; // 🔥 Importamos useParams
+import { PLAN_LIMITS, PlanType } from "@/config/plans";
 import {
-  Facebook,
   ArrowLeft,
   Settings2,
   Plus,
@@ -15,6 +16,8 @@ import {
   Info,
   X,
   Loader2,
+  ShieldCheck, // 🔥 Importado para o aviso
+  Link as LinkIcon, // 🔥 Importado para o botão de conectar
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -50,7 +53,6 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-
 import {
   getMetaPixels,
   saveMetaPixel,
@@ -60,10 +62,11 @@ import {
   toggleMetaAccountStatus,
 } from "@/actions/meta-actions";
 
-interface MetaAssetsSheetProps {
+// 🔥 NOME ATUALIZADO AQUI
+interface MetaAdsSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onReconnect: () => void;
+  // 🔥 Removido o onReconnect da prop, pois a lógica agora vive aqui dentro!
   userId: string;
 }
 
@@ -73,8 +76,15 @@ type Pixel = {
   pixelIds: string[];
   type: string;
   status: "Ativo" | "Desativado";
-  rules?: any;
+  rules?: {
+    lead?: { enabled?: string };
+    addToCart?: { enabled?: string };
+    initiateCheckout?: { enabled?: string; detection?: string };
+    purchase?: { config?: string; value?: string; product?: string };
+    ipConfig?: string;
+  };
 };
+
 type MetaAccount = {
   id: string;
   accountId: string;
@@ -82,6 +92,9 @@ type MetaAccount = {
   isActive: boolean;
 };
 
+// ==========================================
+// 🔥 CORREÇÃO DE LEITURA DO TOOLTIP AQUI
+// ==========================================
 const LabelWithTooltip = ({
   label,
   tooltip,
@@ -99,39 +112,45 @@ const LabelWithTooltip = ({
             className="text-muted-foreground hover:text-foreground transition-colors cursor-help"
           />
         </TooltipTrigger>
-        <TooltipContent className="bg-popover border-border max-w-[250px]">
-          <p className="text-xs font-medium">{tooltip}</p>
+        {/* Forçamos cores invertidas de alto contraste e um z-index máximo */}
+        <TooltipContent className="bg-zinc-900 text-white dark:bg-zinc-100 dark:text-zinc-900 border-none max-w-[250px] p-2.5 rounded-md shadow-xl z-[9999]">
+          <p className="text-xs font-medium leading-relaxed">{tooltip}</p>
         </TooltipContent>
       </Tooltip>
     </TooltipProvider>
   </label>
 );
 
-export function MetaAssetsSheet({
+export function MetaAdsSheet({
   open,
   onOpenChange,
-  onReconnect,
   userId,
-}: MetaAssetsSheetProps) {
-  const router = useRouter(); // 🔥 INSTANCIANDO O ROUTER
+}: MetaAdsSheetProps) {
+  const router = useRouter();
+  const params = useParams(); // 🔥 Pega os parâmetros da URL
+  const slug = params.slug as string; // 🔥 Captura o slug do Workspace
+
   const [sheetView, setSheetView] = useState<"main" | "form">("main");
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false); // 🔥 Novo estado para o botão do OAuth
 
   const [pixels, setPixels] = useState<Pixel[]>([]);
   const [accounts, setAccounts] = useState<MetaAccount[]>([]);
 
   const [metaProfileName, setMetaProfileName] = useState("Carregando...");
   const [metaProfileInitials, setMetaProfileInitials] = useState("--");
-  const [userPlan, setUserPlan] = useState("FREE");
+  const [userPlan, setUserPlan] = useState("START");
 
-  // 🔥 LÓGICA DE LIMITES (Ajuste os nomes dos planos conforme o seu sistema)
   const getLimitsByPlan = (plan: string) => {
-    const p = plan.toUpperCase();
-    if (p === "PRO" || p === "ENTERPRISE") return { accounts: 10, pixels: 5 };
-    if (p === "SCALE") return { accounts: 5, pixels: 3 };
-    if (p === "START") return { accounts: 2, pixels: 1 };
-    return { accounts: 1, pixels: 1 }; // Fallback caso esteja FREE no banco
+    const p = plan.toUpperCase() as PlanType;
+    if (PLAN_LIMITS[p]) {
+      return {
+        accounts: PLAN_LIMITS[p].adAccounts,
+        pixels: PLAN_LIMITS[p].pixels,
+      };
+    }
+    return { accounts: 1, pixels: 1 };
   };
 
   const limits = getLimitsByPlan(userPlan);
@@ -159,10 +178,9 @@ export function MetaAssetsSheet({
     "Enviar IPv6 se houver. Enviar IPv4 se não houver IPv6",
   );
 
-  useEffect(() => {
-    if (open && userId) fetchData();
-  }, [open, userId]);
-
+  // ==========================================
+  // BLOCO DE BUSCA DE DADOS (API)
+  // ==========================================
   const fetchData = async () => {
     setIsLoading(true);
     const [pixelsRes, accountsRes] = await Promise.all([
@@ -178,7 +196,7 @@ export function MetaAssetsSheet({
           pixelIds: p.pixelIds,
           type: p.type,
           status: p.status as "Ativo" | "Desativado",
-          rules: p.rules,
+          rules: p.rules as unknown as Pixel["rules"],
         })),
       );
     }
@@ -193,6 +211,74 @@ export function MetaAssetsSheet({
     setIsLoading(false);
   };
 
+  useEffect(() => {
+    if (open && userId) fetchData();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, userId]);
+
+  // ==========================================
+  // BLOCO DO POPUP (OAUTH META ADS) 🔥 NOVO!
+  // ==========================================
+
+  // 1. Ouvinte: Escuta quando o Popup fechar com sucesso ou erro
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === "META_OAUTH_SUCCESS") {
+        toast.success("Meta Ads conectado com sucesso!");
+        // Salva localmente caso o Card principal ainda precise saber
+        if (typeof window !== "undefined") {
+          localStorage.setItem("meta_connected_sim", "true");
+        }
+        setIsConnecting(false);
+        fetchData(); // Recarrega as contas recém-salvas no banco!
+        router.refresh();
+      } else if (event.data?.type === "META_OAUTH_ERROR") {
+        toast.error("Erro ao conectar com o Meta Ads.");
+        setIsConnecting(false);
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [router]);
+
+  // 2. Ação de abrir o Popup
+  const handleOpenMetaPopup = () => {
+    setIsConnecting(true);
+
+    const appId = process.env.NEXT_PUBLIC_META_APP_ID;
+    const appUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+    const redirectUri = `${appUrl}/api/auth/callback/facebook`;
+    const scopes = "ads_read,read_insights,ads_management";
+
+    // 🔥 Dependendo de como sua Rota do Meta tá feita, manda o Slug ou o UserId.
+    // Usaremos o Slug para padronizar com a arquitetura de Workspaces.
+    const url = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&scope=${scopes}&state=${slug}`;
+
+    const width = 600;
+    const height = 700;
+    const left = window.innerWidth / 2 - width / 2 + window.screenX;
+    const top = window.innerHeight / 2 - height / 2 + window.screenY;
+
+    const popup = window.open(
+      url,
+      "MetaOAuth",
+      `width=${width},height=${height},top=${top},left=${left}`,
+    );
+
+    // O Espião que destrava o botão se o usuário fechar a janela no 'X'
+    const checkPopup = setInterval(() => {
+      if (!popup || popup.closed || popup.closed === undefined) {
+        clearInterval(checkPopup);
+        setIsConnecting(false);
+      }
+    }, 1000);
+  };
+
+  // ==========================================
+  // BLOCO DE CONTROLE DE CONTAS E PIXELS
+  // ==========================================
   const handleToggleAccount = async (id: string, currentStatus: boolean) => {
     const newStatus = !currentStatus;
     const activeAccountsCount = accounts.filter((a) => a.isActive).length;
@@ -202,7 +288,6 @@ export function MetaAssetsSheet({
         `Seu plano ${userPlan} permite apenas ${maxAccountsAllowed} contas ativas.`,
         {
           duration: 5000,
-          // 🔥 REDIRECIONAMENTO PARA A PÁGINA DE PLANOS AQUI!
           action: {
             label: "Fazer Upgrade",
             onClick: () => router.push("/plans"),
@@ -390,17 +475,21 @@ export function MetaAssetsSheet({
   return (
     <>
       <Sheet open={open} onOpenChange={handleClose}>
-        <SheetContent className="sm:max-w-[600px] w-full p-0 flex flex-col bg-background border-l border-border/50 z-[100] shadow-2xl">
+        <SheetContent className="sm:max-w-[570px] w-full p-0 flex flex-col bg-background border-l border-border/50 shadow-2xl">
+          {/* ========================================== */}
+          {/* CABEÇALHO DO SHEET */}
+          {/* ========================================== */}
           <SheetHeader className="p-6 border-b border-border/40 bg-muted/10 shrink-0 transition-all">
             {sheetView === "main" ? (
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-3">
-                  <div className="w-10 h-10 bg-[#1877F2] rounded-lg flex items-center justify-center shrink-0">
-                    <Facebook
-                      size={24}
-                      className="text-white"
-                      fill="currentColor"
-                      stroke="none"
+                  <div className="w-10 h-10 bg-white dark:bg-zinc-900 border border-border/50 rounded-lg flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
+                    <Image
+                      src="/logos/meta.png"
+                      alt="Meta Ads"
+                      width={36}
+                      height={36}
+                      className="object-contain"
                     />
                   </div>
                   <div className="text-left">
@@ -442,6 +531,9 @@ export function MetaAssetsSheet({
           </SheetHeader>
 
           <div className="flex-1 overflow-hidden relative">
+            {/* ========================================== */}
+            {/* VIEW PRINCIPAL: TABS (CONTAS / PIXELS) */}
+            {/* ========================================== */}
             <div
               className={cn(
                 "absolute inset-0 w-full h-full flex flex-col transition-transform duration-300 ease-in-out",
@@ -453,7 +545,7 @@ export function MetaAssetsSheet({
                 className="w-full h-full flex flex-col"
               >
                 <div className="px-6 pb-4 border-b border-border/40 bg-background shrink-0">
-                  <TabsList className="grid w-full grid-cols-2 bg-muted/50 p-1 rounded-lg">
+                  <TabsList className="grid h-12 w-full grid-cols-2 bg-muted/50 p-1 rounded-lg">
                     <TabsTrigger value="contas" className="rounded-md">
                       Contas de Anúncio
                     </TabsTrigger>
@@ -463,6 +555,7 @@ export function MetaAssetsSheet({
                   </TabsList>
                 </div>
 
+                {/* ================== TABS CONTAS ================== */}
                 <TabsContent
                   value="contas"
                   className="flex-1 overflow-y-auto p-6 space-y-6 mt-0 outline-none custom-scrollbar"
@@ -476,6 +569,21 @@ export function MetaAssetsSheet({
                     </div>
                   ) : (
                     <>
+                      {/* 🔥 AVISO DE UX (ESTILO APPMAX) SE JÁ TIVER CONTAS */}
+                      {accounts.length > 0 && (
+                        <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-xl animate-in fade-in slide-in-from-top-2">
+                          <p className="text-sm text-amber-500 font-medium flex items-center gap-2">
+                            <ShieldCheck size={16} /> Quer conectar um perfil
+                            diferente?
+                          </p>
+                          <p className="text-xs text-amber-500/80 mt-1">
+                            Certifique-se de estar logado na nova conta no site
+                            do Facebook <strong>antes</strong> de clicar em
+                            Reconectar Perfil.
+                          </p>
+                        </div>
+                      )}
+
                       <div className="space-y-3">
                         <h4 className="text-sm font-semibold text-foreground">
                           Perfil Conectado
@@ -497,13 +605,19 @@ export function MetaAssetsSheet({
                               </span>
                             </div>
                           </div>
+                          {/* 🔥 Botão Reconectar agora chama o Popup */}
                           <Button
                             variant="outline"
                             size="sm"
-                            onClick={onReconnect}
-                            className="h-8 text-xs hover:bg-muted"
+                            onClick={handleOpenMetaPopup}
+                            disabled={isConnecting}
+                            className="h-8 text-xs hover:bg-muted min-w-[100px] cursor-pointer"
                           >
-                            Reconectar
+                            {isConnecting ? (
+                              <Loader2 size={12} className="animate-spin" />
+                            ) : (
+                              "Reconectar"
+                            )}
                           </Button>
                         </div>
                       </div>
@@ -526,12 +640,37 @@ export function MetaAssetsSheet({
                         </div>
 
                         {accounts.length === 0 ? (
-                          <div className="text-center p-4 border border-dashed border-border/60 rounded-xl text-muted-foreground text-sm">
-                            Nenhuma conta de anúncio encontrada neste perfil.
+                          // ESTADO VAZIO: Botão para conectar primeira conta
+                          <div className="flex flex-col items-center justify-center py-8 text-center space-y-4 border border-dashed border-border/60 rounded-xl bg-muted/10">
+                            <div className="w-12 h-12 rounded-full bg-blue-500/10 flex items-center justify-center text-blue-500">
+                              <Settings2 size={24} />
+                            </div>
+                            <div className="space-y-1">
+                              <h4 className="text-sm font-medium">
+                                Nenhuma Conta Conectada
+                              </h4>
+                              <p className="text-xs text-muted-foreground max-w-[250px]">
+                                Autentique-se com o Meta para sincronizarmos
+                                seus ativos de anúncio.
+                              </p>
+                            </div>
+                            <Button
+                              onClick={handleOpenMetaPopup}
+                              disabled={isConnecting}
+                              className="group relative overflow-hidden gap-2 justify-center font-medium text-xs rounded-lg shadow-sm border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 hover:scale-100 active:scale-95 transition-all duration-300 ease-out hover:border-blue-400 text-white cursor-pointer min-w-[140px]"
+                            >
+                              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out"></div>
+                              {isConnecting ? (
+                                <Loader2 size={16} className="animate-spin" />
+                              ) : (
+                                <>
+                                  <LinkIcon size={16} /> Conectar Perfil
+                                </>
+                              )}
+                            </Button>
                           </div>
-                        ) : ( 
-                          // 🔥 SCROLL APLICADO APENAS NA LISTA (max-h-[560px])
-                          <div className="border border-border/60 rounded-xl divide-y divide-border/60 bg-card overflow-y-auto max-h-[560px] custom-scrollbar">
+                        ) : (
+                          <div className="border border-border/60 rounded-xl divide-y divide-border/60 bg-card overflow-y-auto max-h-[350px] custom-scrollbar">
                             {accounts.map((acc) => (
                               <div
                                 key={acc.id}
@@ -563,6 +702,7 @@ export function MetaAssetsSheet({
                   )}
                 </TabsContent>
 
+                {/* ================== TABS PIXELS ================== */}
                 <TabsContent
                   value="pixels"
                   className="flex-1 overflow-y-auto p-6 space-y-6 mt-0 outline-none custom-scrollbar"
@@ -588,8 +728,9 @@ export function MetaAssetsSheet({
                       </div>
                       <Button
                         onClick={() => openPixelForm()}
-                        className="bg-[#1877F2] hover:bg-[#1877F2]/90 text-white mt-2 gap-2"
+                        className="group relative overflow-hidden rounded-md cursor-pointer text-white border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 shadow-lg hover:shadow-2xl hover:shadow-blue-500/40 hover:scale-105 active:scale-95 transition-all duration-300 ease-out hover:border-blue-400 flex items-center justify-center"
                       >
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out"></div>
                         <Plus size={16} /> Adicionar Novo Pixel
                       </Button>
                     </div>
@@ -612,36 +753,39 @@ export function MetaAssetsSheet({
                               </DropdownMenuTrigger>
                               <DropdownMenuContent
                                 align="end"
-                                className="w-48 bg-popover border-border"
+                                className="w-48 bg-popover border-border z-150"
                               >
                                 <DropdownMenuItem
-                                  className="cursor-pointer gap-2 font-medium"
+                                  className="cursor-pointer gap-2 font-medium focus:bg-blue-600/20"
                                   onClick={() => setPixelToToggle(pixel)}
                                 >
                                   <Power
                                     size={14}
-                                    className={
-                                      pixel.status === "Ativo"
-                                        ? "text-orange-500"
-                                        : "text-emerald-500"
-                                    }
+                                    className="text-black dark:text-white"
                                   />
                                   {pixel.status === "Ativo"
                                     ? "Desativar Pixel"
                                     : "Ativar Pixel"}
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
-                                  className="cursor-pointer gap-2 font-medium"
+                                  className="cursor-pointer gap-2 font-medium focus:bg-blue-600/20"
                                   onClick={() => openPixelForm(pixel)}
                                 >
-                                  <Edit size={14} className="text-blue-500" />{" "}
+                                  <Edit
+                                    size={14}
+                                    className="text-black dark:text-white"
+                                  />{" "}
                                   Editar Dados
                                 </DropdownMenuItem>
                                 <DropdownMenuItem
-                                  className="cursor-pointer gap-2 text-red-500 hover:text-red-600 hover:bg-red-500/10 font-medium"
+                                  className="cursor-pointer gap-2 focus:text-red-400 focus:bg-red-500/10 font-medium"
                                   onClick={() => setPixelToDelete(pixel)}
                                 >
-                                  <Trash2 size={14} /> Deletar Pixel
+                                  <Trash2
+                                    size={14}
+                                    className="focus:text-red-400"
+                                  />{" "}
+                                  Deletar Pixel
                                 </DropdownMenuItem>
                               </DropdownMenuContent>
                             </DropdownMenu>
@@ -680,8 +824,9 @@ export function MetaAssetsSheet({
                       ))}
                       <Button
                         onClick={() => openPixelForm()}
-                        className="bg-[#1877F2] hover:bg-[#1877F2]/90 text-white mt-2 w-max gap-2"
+                        className="group relative overflow-hidden px-5 py-2 rounded-lg cursor-pointer text-white border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 shadow-lg hover:shadow-2xl hover:shadow-blue-500/40 hover:scale-105 active:scale-95 transition-all duration-300 ease-out hover:border-blue-400 flex items-center justify-center"
                       >
+                        <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out"></div>
                         <Plus size={16} /> Adicionar Pixel
                       </Button>
                     </div>
@@ -692,14 +837,17 @@ export function MetaAssetsSheet({
               <div className="p-6 border-t border-border/40 bg-muted/10 shrink-0 flex justify-end gap-3 z-20">
                 <Button
                   onClick={handleClose}
-                  className="w-full bg-[#1877F2] hover:bg-[#1877F2]/90 text-white"
+                  className="group relative overflow-hidden w-full px-5 py-2 rounded-lg cursor-pointer text-white border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 shadow-lg hover:shadow-2xl hover:shadow-blue-500/40 hover:scale-105 active:scale-95 transition-all duration-300 ease-out hover:border-blue-400 flex items-center justify-center"
                 >
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out"></div>
                   Concluir Configurações
                 </Button>
               </div>
             </div>
 
-            {/* VIEW 2: FORM (ADICIONAR/EDITAR) */}
+            {/* ========================================== */}
+            {/* VIEW SECUNDÁRIA: FORM (ADICIONAR/EDITAR) */}
+            {/* ========================================== */}
             <div
               className={cn(
                 "absolute inset-0 w-full h-full flex flex-col transition-transform duration-300 ease-in-out bg-background",
@@ -712,6 +860,7 @@ export function MetaAssetsSheet({
                   onSubmit={handleSavePixel}
                   className="space-y-8 pb-8"
                 >
+                  {/* ... O resto do formulário do Pixel continua inalterado ... */}
                   <div className="space-y-4">
                     <div>
                       <LabelWithTooltip
@@ -773,7 +922,7 @@ export function MetaAssetsSheet({
                             handleAddPixelId({
                               key: "Enter",
                               preventDefault: () => {},
-                            } as any)
+                            } as unknown as React.KeyboardEvent<HTMLInputElement>)
                           }
                           variant="secondary"
                           className="h-10"
@@ -1018,6 +1167,7 @@ export function MetaAssetsSheet({
                   variant="outline"
                   disabled={isSaving}
                   onClick={closePixelForm}
+                  className="cursor-pointer"
                 >
                   Cancelar
                 </Button>
@@ -1025,8 +1175,9 @@ export function MetaAssetsSheet({
                   type="submit"
                   disabled={isSaving}
                   form="pixelForm"
-                  className="bg-[#1877F2] hover:bg-[#1877F2]/90 text-white min-w-[140px]"
+                  className="group relative overflow-hidden px-5 py-2 rounded-md cursor-pointer text-white border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 shadow-lg hover:shadow-2xl hover:shadow-blue-500/40 hover:scale-105 active:scale-95 transition-all duration-300 ease-out hover:border-blue-400 flex items-center justify-center"
                 >
+                  <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out"></div>
                   {isSaving ? (
                     <Loader2 size={16} className="animate-spin" />
                   ) : (
@@ -1039,6 +1190,9 @@ export function MetaAssetsSheet({
         </SheetContent>
       </Sheet>
 
+      {/* ========================================== */}
+      {/* ALERTAS DE EXCLUSÃO E TOGGLE (PIXEL) */}
+      {/* ========================================== */}
       <AlertDialog
         open={!!pixelToDelete}
         onOpenChange={(open) => !open && setPixelToDelete(null)}
@@ -1089,7 +1243,7 @@ export function MetaAssetsSheet({
                 <>
                   O pixel{" "}
                   <strong className="text-foreground">
-                    "{pixelToToggle?.name}"
+                    &quot;{pixelToToggle?.name}&quot;
                   </strong>{" "}
                   será pausado e não enviará mais eventos para o Facebook.
                 </>
@@ -1097,7 +1251,7 @@ export function MetaAssetsSheet({
                 <>
                   O pixel{" "}
                   <strong className="text-foreground">
-                    "{pixelToToggle?.name}"
+                    &quot;{pixelToToggle?.name}&quot;
                   </strong>{" "}
                   voltará a enviar eventos de rastreio imediatamente.
                 </>

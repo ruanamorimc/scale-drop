@@ -1,8 +1,16 @@
 "use client";
 
-import { useState } from "react";
-import { Loader2, CheckCircle2, Cloud } from "lucide-react";
+import { useState, useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
+import {
+  Loader2,
+  CheckCircle2,
+  ShieldCheck,
+  Link as LinkIcon,
+  Unplug,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { toast } from "sonner";
 import {
   Sheet,
   SheetContent,
@@ -10,7 +18,11 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { initiateNuvemshopAuth } from "@/actions/nuvemshop-actions";
+
+import {
+  initiateNuvemshopAuth,
+  disconnectNuvemshopIntegration,
+} from "@/actions/nuvemshop-actions";
 import Image from "next/image";
 
 interface NuvemshopSheetProps {
@@ -18,6 +30,8 @@ interface NuvemshopSheetProps {
   onOpenChange: (open: boolean) => void;
   isConnected?: boolean;
   storeName?: string | null;
+  userId: string;
+  workspaceId: string; // 🔥 Adicionado o workspaceId na interface
 }
 
 export function NuvemshopSheet({
@@ -25,47 +39,100 @@ export function NuvemshopSheet({
   onOpenChange,
   isConnected = false,
   storeName,
+  userId,
+  workspaceId, // 🔥 Recebendo a prop
 }: NuvemshopSheetProps) {
   const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter();
 
+  // ==========================================
+  // OUVINTE DO POPUP OAUTH
+  // ==========================================
+  useEffect(() => {
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === "NUVEMSHOP_OAUTH_SUCCESS") {
+        toast.success("Nuvemshop conectada com sucesso!");
+        setIsLoading(false);
+        router.refresh();
+      } else if (event.data?.type === "NUVEMSHOP_OAUTH_ERROR") {
+        toast.error("Erro ao conectar com a Nuvemshop.");
+        setIsLoading(false);
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+    return () => window.removeEventListener("message", handleMessage);
+  }, [router]);
+
+  // ==========================================
+  // LÓGICA DE CONECTAR (OAUTH)
+  // ==========================================
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault(); // Evita o recarregamento da página
+    e.preventDefault();
     setIsLoading(true);
 
     try {
+      // 🔥 initiate não precisa de workspaceId, pois o auth só redireciona.
+      // O salvamento vai acontecer na rota de callback da Nuvemshop!
       const res = await initiateNuvemshopAuth();
       if (res.success && res.url) {
-        // Abre uma janela estilo pop-up centralizada (típico de OAuth)
         const width = 600;
         const height = 700;
-        const left = (window.innerWidth - width) / 2;
-        const top = (window.innerHeight - height) / 2;
+        const left = window.innerWidth / 2 - width / 2 + window.screenX;
+        const top = window.innerHeight / 2 - height / 2 + window.screenY;
 
-        window.open(
+        const popup = window.open(
           res.url,
           "NuvemshopAuth",
           `width=${width},height=${height},top=${top},left=${left}`,
         );
+
+        const checkPopup = setInterval(() => {
+          if (!popup || popup.closed || popup.closed === undefined) {
+            clearInterval(checkPopup);
+            setIsLoading(false);
+          }
+        }, 1000);
+      } else {
+        toast.error("Erro ao gerar link de autorização.");
+        setIsLoading(false);
       }
     } catch (error) {
       console.error(error);
-    } finally {
+      toast.error("Ocorreu um erro interno.");
       setIsLoading(false);
     }
   };
 
+  // ==========================================
+  // LÓGICA DE DESCONECTAR
+  // ==========================================
+  const handleDisconnect = async () => {
+    setIsLoading(true);
+    // 🔥 Repassando o workspaceId para a Action de Desconectar
+    const res = await disconnectNuvemshopIntegration(userId, workspaceId);
+
+    if (res?.success) {
+      toast.info("Nuvemshop desconectada com sucesso.");
+      onOpenChange(false);
+    } else {
+      toast.error(res?.error || "Erro ao desconectar Nuvemshop.");
+    }
+    setIsLoading(false);
+  };
+
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      <SheetContent className="sm:max-w-[500px] w-full p-0 flex flex-col bg-background border-l border-border/50">
+      <SheetContent className="sm:max-w-[570px] w-full p-0 flex flex-col bg-background border-l border-border/50 shadow-2xl">
         <SheetHeader className="p-6 border-b border-border/40 bg-muted/10 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white dark:bg-zinc-900 border border-border/50 rounded-lg flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
               <Image
-                src="/logos/nuvemshop.jpg"
+                src="/logos/nuvemshop.png"
                 alt="Nuvemshop"
                 width={26}
                 height={26}
-                className="object-contain"
+                className="object-contain rounded-sm"
               />
             </div>
             <div className="text-left">
@@ -84,12 +151,11 @@ export function NuvemshopSheet({
               onSubmit={handleSubmit}
               className="space-y-6"
             >
-              {/* Caixa de Atenção/Instruções - Usando a paleta Blue para combinar com a Nuvemshop */}
-              <div className="bg-blue-500/10 border border-blue-500/20 p-4 rounded-xl">
-                <p className="text-sm text-blue-600 dark:text-blue-500 font-medium flex items-center gap-2">
-                  <Cloud size={16} /> Instalação em 1-Clique
+              <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-xl">
+                <p className="text-sm text-amber-500 font-medium flex items-center gap-2">
+                  <ShieldCheck size={16} /> Instalação em 1-Clique
                 </p>
-                <p className="text-xs text-blue-600/80 dark:text-blue-500/80 mt-1 leading-relaxed">
+                <p className="text-xs text-amber-500/80 mt-1 leading-relaxed">
                   Diferente de outras plataformas, a integração com a Nuvemshop
                   não exige configuração de chaves. Ao clicar em conectar, você
                   será redirecionado para autorizar o aplicativo. Nós
@@ -107,7 +173,7 @@ export function NuvemshopSheet({
                     <li>Ler dados básicos da loja e produtos.</li>
                     <li>Ler histórico de pedidos e atualizações de status.</li>
                     <li>
-                      O Scale Drop <strong>nunca</strong> fará alterações não
+                      O app <strong>nunca</strong> fará alterações não
                       autorizadas na sua loja.
                     </li>
                   </ul>
@@ -133,10 +199,24 @@ export function NuvemshopSheet({
                 </p>
               </div>
 
-              <div className="pt-4">
+              <div className="pt-4 flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={handleDisconnect}
+                  disabled={isLoading}
+                  className="flex-1 border-red-500/20 text-red-500 hover:bg-red-500/10 transition-colors"
+                >
+                  {isLoading ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <>
+                      <Unplug size={14} className="mr-2" /> Desconectar
+                    </>
+                  )}
+                </Button>
                 <Button
                   onClick={() => onOpenChange(false)}
-                  className="w-full bg-blue-600 hover:bg-blue-700 text-white"
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   Fechar
                 </Button>
@@ -146,7 +226,7 @@ export function NuvemshopSheet({
         </div>
 
         {!isConnected && (
-          <div className="p-6 border-t border-border/40 bg-muted/10 shrink-0 flex justify-end gap-3">
+          <div className="p-6 border-t border-border/40 bg-muted/10 shrink-0 flex justify-end gap-3 cursor-pointer">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
@@ -154,15 +234,14 @@ export function NuvemshopSheet({
               type="submit"
               form="nuvemshopForm"
               disabled={isLoading}
-              className="bg-blue-600 hover:bg-blue-700 text-white min-w-[140px]"
+              className="group relative overflow-hidden gap-2 justify-center font-medium text-xs rounded-lg shadow-sm border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 hover:scale-100 active:scale-95 transition-all duration-300 ease-out hover:border-blue-400 text-white cursor-pointer min-w-[140px]"
             >
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out"></div>
+              <LinkIcon size={14} />
               {isLoading ? (
-                <>
-                  <Loader2 size={16} className="animate-spin mr-2" />
-                  Redirecionando...
-                </>
+                <Loader2 size={16} className="animate-spin" />
               ) : (
-                "Conectar Loja"
+                "Criar Webhook"
               )}
             </Button>
           </div>

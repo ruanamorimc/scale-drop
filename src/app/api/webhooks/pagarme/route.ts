@@ -94,6 +94,9 @@ export async function POST(req: Request) {
       const rawOrderNumber = data.code || data.id;
       const orderNumberFormatted = formatOrderNumber(rawOrderNumber);
 
+      // 🔥 CAPTURA O METADATA (Se houver)
+      const webhookMetadata = data.metadata ? data.metadata : undefined;
+
       // 5. O UPSERT Perfeito (Baseado 100% no seu schema)
       await prisma.order.upsert({
         where: {
@@ -105,14 +108,17 @@ export async function POST(req: Request) {
         update: {
           status: orderStatus,
           paymentStatus: paymentStatus,
+          // Atualiza o metadata apenas se o Webhook mandar dados novos,
+          // evitando apagar o trackeamento na troca de status!
+          ...(webhookMetadata && { metadata: webhookMetadata }),
         },
         create: {
           userId: integration.userId,
           storeIntegrationId: integrationId,
           externalOrderId: data.id,
-          orderNumber: orderNumberFormatted, // 🔥 Agora salva com a hashtag garantida!
+          orderNumber: orderNumberFormatted,
 
-          // Valores (Seu schema exige subtotal e total)
+          // Valores
           total: amountInReais,
           subtotal: amountInReais,
 
@@ -126,8 +132,11 @@ export async function POST(req: Request) {
           customerEmail: data?.customer?.email || "",
           customerDocument: data?.customer?.document || "",
 
-          // Endereço (Seu schema exige, então passamos um fallback se a API não mandar)
+          // Endereço
           shippingAddress: "Endereço não informado via Webhook",
+
+          // 🔥 SALVA O TRACKEAMENTO AQUI!
+          metadata: webhookMetadata || null,
         },
       });
 

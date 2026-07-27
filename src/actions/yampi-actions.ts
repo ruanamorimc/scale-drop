@@ -3,42 +3,52 @@
 import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 
-export async function saveYampiIntegration(userId: string, data: { name: string; secretToken: string }) {
+export async function saveYampiIntegration(
+  userId: string,
+  slug: string, // 🔥 Recebe o slug
+  data: { name: string; secretToken: string },
+) {
   try {
-    // Procura se já tem uma integração da Yampi
+    // 🔍 Traduz o slug no ID verdadeiro
+    const workspace = await prisma.workspace.findUnique({
+      where: { slug },
+    });
+
+    if (!workspace)
+      return { success: false, error: "Workspace não encontrado." };
+
     const existing = await prisma.storeIntegration.findFirst({
-      where: { userId, platform: "YAMPI" }
+      where: { userId, workspaceId: workspace.id, platform: "YAMPI" },
     });
 
     let integrationId = "";
 
     if (existing) {
-      // Atualiza a existente
       const updated = await prisma.storeIntegration.update({
         where: { id: existing.id },
-        data: { 
-          storeName: data.name, // 🔥 CORREÇÃO: Usando 'storeName' conforme o Schema
+        data: {
+          storeName: data.name,
           accessToken: data.secretToken,
-          isConnected: true
-        }
+          isConnected: true,
+        },
       });
       integrationId = updated.id;
     } else {
-      // Cria uma nova
       const created = await prisma.storeIntegration.create({
         data: {
           userId,
+          workspaceId: workspace.id, // 🔥 Salva com o ID real
           platform: "YAMPI",
-          storeName: data.name, // 🔥 CORREÇÃO AQUI TAMBÉM
+          storeName: data.name,
           accessToken: data.secretToken,
-          isConnected: true
-        }
+          isConnected: true,
+        },
       });
       integrationId = created.id;
     }
 
     revalidatePath("/settings/integrations");
-    
+
     const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
     const webhookUrl = `${appUrl}/api/webhooks/yampi?id=${integrationId}`;
 
@@ -49,11 +59,22 @@ export async function saveYampiIntegration(userId: string, data: { name: string;
   }
 }
 
-export async function disconnectYampiIntegration(userId: string) {
+export async function disconnectYampiIntegration(
+  userId: string,
+  slug: string, // 🔥 Recebe o slug
+) {
   try {
-    await prisma.storeIntegration.deleteMany({
-      where: { userId, platform: "YAMPI" }
+    const workspace = await prisma.workspace.findUnique({
+      where: { slug },
     });
+
+    if (!workspace)
+      return { success: false, error: "Workspace não encontrado." };
+
+    await prisma.storeIntegration.deleteMany({
+      where: { userId, workspaceId: workspace.id, platform: "YAMPI" },
+    });
+
     revalidatePath("/settings/integrations");
     return { success: true };
   } catch (error) {

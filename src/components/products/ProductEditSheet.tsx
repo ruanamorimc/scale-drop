@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo } from "react";
 import { useForm } from "react-hook-form";
-import { Product } from "@/app/(private)/products/columns";
+import { Product } from "@/app/(private)/[workspaceId]/products/columns";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";

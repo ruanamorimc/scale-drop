@@ -9,10 +9,19 @@ export async function GET(request: Request) {
   const code = searchParams.get("code");
   const error = searchParams.get("error");
 
+  // 🔥 Helper para gerar o script que avisa a Sheet e fecha o popup
+  const popupScript = (type: string) => `
+    <script>
+      window.opener.postMessage({ type: "${type}" }, "*");
+      window.close();
+    </script>
+  `;
+
   if (error || !code) {
-    return NextResponse.redirect(
-      new URL("/settings/integrations?error=auth_failed", request.url),
-    );
+    // Ao invés de redirect, fecha o popup disparando o erro para a Sheet
+    return new NextResponse(popupScript("NUVEMSHOP_OAUTH_ERROR"), {
+      headers: { "Content-Type": "text/html" },
+    });
   }
 
   try {
@@ -94,49 +103,76 @@ export async function GET(request: Request) {
     const userId = session?.user?.id;
 
     if (!userId) {
-      return NextResponse.redirect(
-        new URL("/settings/integrations?error=auth_failed", request.url),
-      );
+      return new NextResponse(popupScript("NUVEMSHOP_OAUTH_ERROR"), {
+        headers: { "Content-Type": "text/html" },
+      });
     }
 
-    // 3. Salva no banco de dados
-    await prisma.storeIntegration.upsert({
+    // 🔥 NOVO: Busca o workspaceId, que agora é obrigatório no Prisma
+    const workspace = await prisma.workspace.findFirst({
+      where: { userId: userId },
+    });
+
+    if (!workspace) {
+      console.error("[Scale Drop] Workspace não encontrado para o usuário.");
+      throw new Error("Workspace não encontrado");
+    }
+
+    // 3. Salva no banco de dados (Substituindo o antigo upsert)
+    const existingIntegration = await prisma.storeIntegration.findFirst({
       where: {
-        userId_platform: { userId, platform: "NUVEMSHOP" },
-      },
-      update: {
-        storeId,
-        storeName,
-        storeUrl,
-        accessToken,
-        isConnected: true,
-        isActive: true,
-        lastSyncAt: new Date(),
-      },
-      create: {
-        userId,
+        userId: userId,
+        workspaceId: workspace.id,
         platform: "NUVEMSHOP",
-        storeId,
-        storeName,
-        storeUrl,
-        accessToken,
-        isConnected: true,
-        isActive: true,
       },
     });
 
+    if (existingIntegration) {
+      await prisma.storeIntegration.update({
+        where: { id: existingIntegration.id },
+        data: {
+          storeId,
+          storeName,
+          storeUrl,
+          accessToken,
+          isConnected: true,
+          isActive: true,
+          lastSyncAt: new Date(),
+        },
+      });
+    } else {
+      await prisma.storeIntegration.create({
+        data: {
+          userId,
+          workspaceId: workspace.id, // 🔥 Coluna obrigatória!
+          platform: "NUVEMSHOP",
+          storeId,
+          storeName,
+          storeUrl,
+          accessToken,
+          isConnected: true,
+          isActive: true,
+        },
+      });
+    }
+
+    // Registra os webhooks
     await registerNuvemshopWebhooks(storeId, accessToken);
 
-    return NextResponse.redirect(
-      new URL(
-        "/settings/integrations?success=nuvemshop_connected",
-        request.url,
-      ),
-    );
+    // Retorna o HTML para fechar o popup avisando a Sheet que deu certo!
+    return new NextResponse(popupScript("NUVEMSHOP_OAUTH_SUCCESS"), {
+      headers: { "Content-Type": "text/html" },
+    });
   } catch (err) {
     console.error("[Scale Drop] Erro Crítico no Callback:", err);
-    return NextResponse.redirect(
-      new URL("/settings/integrations?error=internal_error", request.url),
+    return new NextResponse(
+      `
+      <script>
+        window.opener.postMessage({ type: "NUVEMSHOP_OAUTH_ERROR" }, "*");
+        window.close();
+      </script>
+      `,
+      { headers: { "Content-Type": "text/html" } },
     );
   }
 }

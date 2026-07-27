@@ -1,7 +1,15 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Copy, Loader2, CheckCircle2, KeyRound } from "lucide-react";
+import {
+  Copy,
+  Loader2,
+  CheckCircle2,
+  KeyRound,
+  ShieldCheck,
+  Link as LinkIcon,
+  Unplug,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { toast } from "sonner";
 import {
@@ -11,52 +19,92 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-import { connectPagarme } from "@/actions/pagarme-actions";
+import {
+  connectPagarme,
+  disconnectPagarmeIntegration,
+} from "@/actions/pagarme-actions";
 import Image from "next/image";
 
 interface PagarmeSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   existingUrl?: string | null;
+  userId: string; // 🔥 Adicionado o userId para repassar pra action
+  workspaceId: string; // 🔥 Adicionado o workspaceId na interface
 }
 
 export function PagarmeSheet({
   open,
   onOpenChange,
   existingUrl,
+  userId,
+  workspaceId, // 🔥 Recebendo a prop
 }: PagarmeSheetProps) {
   const [secretKey, setSecretKey] = useState("");
   const [publicKey, setPublicKey] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
 
-  // 🔥 Se ele já tem URL, pula o formulário e vai direto pra tela verde
   useEffect(() => {
     if (open) {
-      if (existingUrl) {
-        setGeneratedUrl(existingUrl);
-      } else {
-        setGeneratedUrl(null);
-        setSecretKey("");
-        setPublicKey("");
-      }
+      const timer = setTimeout(() => {
+        if (existingUrl) {
+          setGeneratedUrl(existingUrl);
+        } else {
+          setGeneratedUrl(null);
+          setSecretKey("");
+          setPublicKey("");
+        }
+      }, 0);
+      return () => clearTimeout(timer);
     }
   }, [open, existingUrl]);
 
+  // ==========================================
+  // LÓGICA DE CONECTAR
+  // ==========================================
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!secretKey || !publicKey)
       return toast.error("Preencha ambas as chaves da API.");
 
     setIsLoading(true);
-    const res = await connectPagarme({ secretKey, publicKey });
+    // 🔥 Repassando o userId e o workspaceId para a Action
+    const res = await connectPagarme(userId, workspaceId, {
+      secretKey,
+      publicKey,
+    });
 
     if (res?.success) {
       toast.success("Pagar.me conectada com sucesso!");
-      // Ao fechar, a página revalida e na próxima vez que abrir, existingUrl já estará preenchida
-      onOpenChange(false);
+      // Se a action retornou a webhookUrl, atualiza a tela
+      if (res.webhookUrl) {
+        setGeneratedUrl(res.webhookUrl);
+      } else {
+        onOpenChange(false);
+      }
     } else {
       toast.error(res?.error || "Erro ao conectar integração.");
+    }
+    setIsLoading(false);
+  };
+
+  // ==========================================
+  // LÓGICA DE DESCONECTAR
+  // ==========================================
+  const handleDisconnect = async () => {
+    setIsLoading(true);
+    // 🔥 Repassando o userId e o workspaceId para a Action
+    const res = await disconnectPagarmeIntegration(userId, workspaceId);
+
+    if (res.success) {
+      toast.info("Pagar.me desconectada com sucesso.");
+      setGeneratedUrl(null);
+      setSecretKey("");
+      setPublicKey("");
+      onOpenChange(false);
+    } else {
+      toast.error("Erro ao desconectar Pagar.me.");
     }
     setIsLoading(false);
   };
@@ -70,11 +118,9 @@ export function PagarmeSheet({
 
   return (
     <Sheet open={open} onOpenChange={onOpenChange}>
-      {/* 🔥 Largura padronizada e estrutura idêntica à Appmax */}
-      <SheetContent className="sm:max-w-[500px] w-full p-0 flex flex-col bg-background border-l border-border/50">
+      <SheetContent className="sm:max-w-[570px] w-full p-0 flex flex-col bg-background border-l border-border/50 shadow-2xl">
         <SheetHeader className="p-6 border-b border-border/40 bg-muted/10 shrink-0">
           <div className="flex items-center gap-3">
-            {/* Logo com fundo branco para contraste */}
             <div className="w-10 h-10 bg-white dark:bg-zinc-900 border border-border/50 rounded-lg flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
               <Image
                 src="/logos/pagar-me.png"
@@ -96,12 +142,11 @@ export function PagarmeSheet({
         <div className="flex-1 overflow-y-auto p-6">
           {!generatedUrl ? (
             <form id="pagarmeForm" onSubmit={handleSave} className="space-y-6">
-              {/* Caixa de Atenção/Instruções - Usando a paleta Emerald para combinar com a Pagar.me */}
-              <div className="bg-emerald-500/10 border border-emerald-500/20 p-4 rounded-xl">
-                <p className="text-sm text-emerald-600 dark:text-emerald-500 font-medium flex items-center gap-2">
+              <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-xl">
+                <p className="text-sm text-amber-500 font-medium flex items-center gap-2">
                   <KeyRound size={16} /> Onde encontro as chaves?
                 </p>
-                <p className="text-xs text-emerald-600/80 dark:text-emerald-500/80 mt-1 leading-relaxed">
+                <p className="text-xs text-amber-500/80 mt-1 leading-relaxed">
                   Acesse o painel da Pagar.me, vá em{" "}
                   <strong>Configurações &gt; Chaves de API</strong>. Copie a
                   Secret Key e a Public Key do seu ambiente e cole abaixo.
@@ -118,7 +163,7 @@ export function PagarmeSheet({
                     value={secretKey}
                     onChange={(e) => setSecretKey(e.target.value)}
                     placeholder="sk_test_..."
-                    className="flex h-10 w-full rounded-md border border-border/60 bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                    className="flex h-10 w-full rounded-md border border-border/60 bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none font-mono"
                     required
                   />
                 </div>
@@ -131,7 +176,7 @@ export function PagarmeSheet({
                     value={publicKey}
                     onChange={(e) => setPublicKey(e.target.value)}
                     placeholder="pk_test_..."
-                    className="flex h-10 w-full rounded-md border border-border/60 bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-emerald-500 outline-none"
+                    className="flex h-10 w-full rounded-md border border-border/60 bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none font-mono"
                     required
                   />
                 </div>
@@ -190,10 +235,24 @@ export function PagarmeSheet({
                 </div>
               </div>
 
-              <div className="pt-4">
+              <div className="pt-4 flex gap-3">
+                <Button
+                  variant="outline"
+                  onClick={handleDisconnect}
+                  disabled={isLoading}
+                  className="flex-1 border-red-500/20 text-red-500 hover:bg-red-500/10 transition-colors"
+                >
+                  {isLoading ? (
+                    <Loader2 size={16} className="animate-spin" />
+                  ) : (
+                    <>
+                      <Unplug size={14} className="mr-2" /> Desconectar
+                    </>
+                  )}
+                </Button>
                 <Button
                   onClick={() => onOpenChange(false)}
-                  className="w-full bg-emerald-600 hover:bg-emerald-700 text-white"
+                  className="flex-1 bg-blue-600 hover:bg-blue-700 text-white"
                 >
                   Fechar
                 </Button>
@@ -203,7 +262,7 @@ export function PagarmeSheet({
         </div>
 
         {!generatedUrl && (
-          <div className="p-6 border-t border-border/40 bg-muted/10 shrink-0 flex justify-end gap-3">
+          <div className="p-6 border-t border-border/40 bg-muted/10 shrink-0 flex justify-end gap-3 cursor-pointer">
             <Button variant="outline" onClick={() => onOpenChange(false)}>
               Cancelar
             </Button>
@@ -211,12 +270,14 @@ export function PagarmeSheet({
               type="submit"
               form="pagarmeForm"
               disabled={isLoading}
-              className="bg-emerald-600 hover:bg-emerald-700 text-white min-w-[140px]"
+              className="group relative overflow-hidden gap-2 justify-center font-medium text-xs rounded-lg shadow-sm border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 hover:scale-100 active:scale-95 transition-all duration-300 ease-out hover:border-blue-400 text-white cursor-pointer min-w-[140px]"
             >
+              <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out"></div>
+              <LinkIcon size={14} />
               {isLoading ? (
                 <Loader2 size={16} className="animate-spin" />
               ) : (
-                "Conectar API"
+                "Criar Webhook"
               )}
             </Button>
           </div>

@@ -1,6 +1,7 @@
 "use client";
 
-import { IconHelp, IconSearch, IconSettings } from "@tabler/icons-react";
+import { useParams } from "next/navigation";
+import { IconHelp, IconSend, IconSettings } from "@tabler/icons-react";
 
 import {
   SidebarGroup,
@@ -9,7 +10,6 @@ import {
   SidebarMenuItem,
 } from "@/components/ui/sidebar";
 
-// 🔥 Importe o nosso componente SidebarLink
 import { SidebarLink } from "./SidebarLink";
 
 const items = [
@@ -17,8 +17,6 @@ const items = [
     title: "Configurações",
     url: "/settings/integrations",
     icon: IconSettings,
-    // Se você tiver sub-páginas em configurações (ex: /settings/profile),
-    // pode remover o exact: true para que o menu fique aceso nelas também.
     exact: false,
   },
   {
@@ -26,33 +24,46 @@ const items = [
     url: "/help",
     icon: IconHelp,
     exact: true,
+    isGlobal: true, // 🔥 Adicionamos isso para indicar que a rota fica fora do [slug]
   },
   {
-    title: "Pesquisar",
+    title: "Feedback",
     url: "#",
-    icon: IconSearch,
+    icon: IconSend,
     exact: true,
   },
 ];
 
-export function NavSecondary() {
+export function NavSecondary({ fallbackSlug }: { fallbackSlug: string }) {
+  const params = useParams();
+
+  // 🔥 A MÁGICA:
+  const slug = (params.slug as string) || fallbackSlug;
+
   return (
     <SidebarGroup className="mt-auto">
-      {" "}
-      {/* mt-auto para empurrar para baixo, se necessário */}
       <SidebarGroupContent>
         <SidebarMenu>
-          {items.map((item) => (
-            <SidebarMenuItem key={item.title}>
-              {/* 🔥 Substituição pelo SidebarLink */}
-              <SidebarLink
-                url={item.url}
-                title={item.title}
-                icon={item.icon}
-                exact={item.exact}
-              />
-            </SidebarMenuItem>
-          ))}
+          {items.map((item) => {
+            // 🔥 A MÁGICA: Monta a URL dinamicamente
+            // Se for "#" ou uma rota global (como o Help), usa a URL original.
+            // Se for rota de painel (como Settings), injeta o slug!
+            const fullUrl =
+              item.url === "#" || item.isGlobal
+                ? item.url
+                : `/${slug}${item.url}`;
+
+            return (
+              <SidebarMenuItem key={item.title}>
+                <SidebarLink
+                  url={fullUrl} // Passando a URL construída
+                  title={item.title}
+                  icon={item.icon}
+                  exact={item.exact}
+                />
+              </SidebarMenuItem>
+            );
+          })}
         </SidebarMenu>
       </SidebarGroupContent>
     </SidebarGroup>

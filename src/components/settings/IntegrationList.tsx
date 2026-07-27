@@ -4,7 +4,9 @@
 // IMPORTS
 // ==========================================
 import { useState, useEffect } from "react";
+import { useParams, useRouter } from "next/navigation";
 import Image from "next/image";
+import { PLAN_LIMITS, PlanType } from "@/config/plans";
 import {
   ExternalLink,
   ShoppingBag,
@@ -17,42 +19,59 @@ import {
   Settings2,
   Unplug,
   CheckCircle2,
+  Lock,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PremiumCard } from "@/components/cards/PremiumCard";
 import { toast } from "sonner";
 import { cn } from "@/lib/utils";
 
-// Server Actions - Desconectar e Conectar
-import { connectMercadoLivreAction } from "@/actions/mercadolivre-actions";
+// Server Actions
+import { disconnectMercadoLivre } from "@/actions/mercadolivre-actions";
 import { disconnectYampiIntegration } from "@/actions/yampi-actions";
 import { disconnectCartpandaIntegration } from "@/actions/cartpanda-actions";
-import { disconnectShopifyIntegration } from "@/actions/shopify-actions";
+import {
+  disconnectShopifyIntegration,
+  disconnectShopifyPaymentsIntegration,
+} from "@/actions/shopify-actions";
 import { disconnectAppmaxIntegration } from "@/actions/appmax-actions";
 import { disconnectPagarmeIntegration } from "@/actions/pagarme-actions";
 import { disconnectNuvemshopIntegration } from "@/actions/nuvemshop-actions";
 
-// Sheets & Modais (Modais Laterais)
-import { MetaAssetsSheet } from "./MetaAssetsSheet";
+// Sheets & Modais
+import { MetaAdsSheet } from "./MetaAdsSheet";
 import { YampiSheet } from "./YampiSheet";
 import { CartpandaSheet } from "./CartpandaSheet";
 import { ShopifySheet } from "./ShopifySheet";
+import { ShopifyPaymentsSheet } from "./ShopifyPaymentsSheet";
 import { AppmaxSheet } from "@/components/settings/AppmaxSheet";
 import { PagarmeSheet } from "@/components/settings/PagarmeSheet";
 import { NuvemshopSheet } from "@/components/settings/NuvemshopSheet";
+import { MercadoLivreSheet } from "./MercadoLivreSheet";
 
 // ==========================================
 // INTERFACES & CONSTANTES
 // ==========================================
+interface StoreData {
+  id: string;
+  storeName: string;
+  isActive: boolean;
+}
+
 interface IntegrationsListProps {
   isMLConnected: boolean;
+  mlStores?: StoreData[];
   userId: string;
+  userPlan?: string;
+  isMetaConnected?: boolean; // 🔥 ADICIONADO AQUI: Recebe a verdade do Backend!
   isYampiConnected?: boolean;
   yampiUrl?: string | null;
   isCartpandaConnected?: boolean;
   cartpandaUrl?: string | null;
   isShopifyConnected?: boolean;
   shopifyDomain?: string | null;
+  isShopifyPaymentsConnected?: boolean;
+  shopifyPaymentsUrl?: string | null;
   isAppmaxConnected?: boolean;
   appmaxUrl?: string | null;
   isPagarmeConnected?: boolean;
@@ -71,14 +90,19 @@ const CATEGORIES = [
 ];
 
 export function IntegrationsList({
-  isMLConnected,
+  isMLConnected = false,
+  mlStores = [],
   userId,
+  userPlan = "START",
+  isMetaConnected = false, // 🔥 Recebe a prop
   isYampiConnected = false,
   yampiUrl = null,
   isCartpandaConnected = false,
   cartpandaUrl = null,
   isShopifyConnected = false,
   shopifyDomain = null,
+  isShopifyPaymentsConnected = false,
+  shopifyPaymentsUrl = null,
   isAppmaxConnected = false,
   appmaxUrl = null,
   isPagarmeConnected = false,
@@ -86,45 +110,95 @@ export function IntegrationsList({
   isNuvemshopConnected = false,
   nuvemshopStoreName = null,
 }: IntegrationsListProps) {
+  const router = useRouter();
+  const params = useParams();
+  const slug = params.slug as string;
+
   // ==========================================
   // ESTADOS DO COMPONENTE
   // ==========================================
   const [activeTab, setActiveTab] = useState("all");
 
-  const [isFbConnected, setIsFbConnected] = useState(() => {
-    if (typeof window !== "undefined") {
-      return localStorage.getItem("meta_connected_sim") === "true";
-    }
-    return false;
-  });
+  // 🔥 AGORA É REAL: O estado inicial vem direto do seu banco de dados
+  const [isFbConnected, setIsFbConnected] = useState(isMetaConnected);
 
+  // Garante que o estado atualize se a propriedade do banco mudar via servidor
+  useEffect(() => {
+    setIsFbConnected(isMetaConnected);
+  }, [isMetaConnected]);
+
+  const [isMlModalOpen, setIsMlModalOpen] = useState(false);
   const [isFbModalOpen, setIsFbModalOpen] = useState(false);
   const [isYampiModalOpen, setIsYampiModalOpen] = useState(false);
   const [isCartpandaModalOpen, setIsCartpandaModalOpen] = useState(false);
   const [isShopifyModalOpen, setIsShopifyModalOpen] = useState(false);
+  const [isShopifyPaymentsModalOpen, setIsShopifyPaymentsModalOpen] =
+    useState(false);
   const [isAppmaxModalOpen, setIsAppmaxModalOpen] = useState(false);
   const [isPagarmeModalOpen, setIsPagarmeModalOpen] = useState(false);
   const [isNuvemshopModalOpen, setIsNuvemshopModalOpen] = useState(false);
 
   // ==========================================
-  // HANDLERS E FUNÇÕES DE DESCONEXÃO
+  // LÓGICA DE BLOQUEIO DE PLANO (PAYWALL)
   // ==========================================
-  const handleConnectFacebook = () => {
-    const appId = process.env.NEXT_PUBLIC_META_APP_ID;
-    const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-    const redirectUri = `${appUrl}/api/auth/callback/facebook`;
-    const scopes = "ads_read,read_insights,ads_management";
-    window.location.href = `https://www.facebook.com/v19.0/dialog/oauth?client_id=${appId}&redirect_uri=${redirectUri}&scope=${scopes}&state=${userId}`;
+  const getIntegrationsLimit = (plan: string) => {
+    const p = plan.toUpperCase() as PlanType;
+    if (PLAN_LIMITS[p]) return PLAN_LIMITS[p].integrations;
+    return PLAN_LIMITS.START.integrations;
   };
 
-  const handleDisconnectFacebook = () => {
+  const maxIntegrations = getIntegrationsLimit(userPlan);
+
+  const activeIntegrationsCount = [
+    isMLConnected,
+    isYampiConnected,
+    isCartpandaConnected,
+    isShopifyConnected,
+    isShopifyPaymentsConnected,
+    isAppmaxConnected,
+    isPagarmeConnected,
+    isNuvemshopConnected,
+    isFbConnected,
+  ].filter(Boolean).length;
+
+  const isLimitReached = activeIntegrationsCount >= maxIntegrations;
+
+  const handleConnectionAttempt = (action: () => void) => {
+    if (isLimitReached) {
+      toast.error("Limite do Plano Atingido", {
+        description: `Você atingiu o limite de ${maxIntegrations} integração(ões) ativas. Faça o upgrade para conectar mais lojas ou gateways.`,
+        action: {
+          label: "Fazer Upgrade",
+          onClick: () => router.push("/settings/billing"),
+        },
+      });
+      return;
+    }
+    action();
+  };
+
+  // ==========================================
+  // HANDLERS E FUNÇÕES DE DESCONEXÃO
+  // ==========================================
+  const handleDisconnectML = async () => {
+    const res = await disconnectMercadoLivre(slug);
+    if (res.success) {
+      toast.success("Mercado Livre desconectado com sucesso.");
+      setIsMlModalOpen(false);
+    } else {
+      toast.error(res.error || "Erro ao desconectar Mercado Livre.");
+    }
+  };
+
+  const handleDisconnectMeta = () => {
+    // 🔥 Removemos o localStorage falso daqui
     setIsFbConnected(false);
-    localStorage.removeItem("meta_connected_sim");
+    // TODO: Adicionar Server Action para remover o token no banco de dados futuramente
     toast.error("Conta do Meta desconectada.");
   };
 
   const handleDisconnectYampi = async () => {
-    const res = await disconnectYampiIntegration(userId);
+    const res = await disconnectYampiIntegration(userId, slug);
     if (res.success) {
       toast.info("Yampi desconectada com sucesso.");
       setIsYampiModalOpen(false);
@@ -132,7 +206,7 @@ export function IntegrationsList({
   };
 
   const handleDisconnectCartpanda = async () => {
-    const res = await disconnectCartpandaIntegration(userId);
+    const res = await disconnectCartpandaIntegration(userId, slug);
     if (res.success) {
       toast.info("Cartpanda desconectada.");
       setIsCartpandaModalOpen(false);
@@ -140,15 +214,25 @@ export function IntegrationsList({
   };
 
   const handleDisconnectShopify = async () => {
-    const res = await disconnectShopifyIntegration(userId);
+    const res = await disconnectShopifyIntegration(userId, slug);
     if (res.success) {
       toast.info("Shopify desconectada com sucesso.");
       setIsShopifyModalOpen(false);
     }
   };
 
+  const handleDisconnectShopifyPayments = async () => {
+    const res = await disconnectShopifyPaymentsIntegration(userId, slug);
+    if (res.success) {
+      toast.info("Shopify Payments desconectado com sucesso.");
+      setIsShopifyPaymentsModalOpen(false);
+    } else {
+      toast.error("Erro ao desconectar Shopify Payments.");
+    }
+  };
+
   const handleDisconnectAppmax = async () => {
-    const res = await disconnectAppmaxIntegration(userId);
+    const res = await disconnectAppmaxIntegration(userId, slug);
     if (res.success) {
       toast.info("Appmax desconectada com sucesso.");
       setIsAppmaxModalOpen(false);
@@ -158,7 +242,7 @@ export function IntegrationsList({
   };
 
   const handleDisconnectPagarme = async () => {
-    const res = await disconnectPagarmeIntegration();
+    const res = await disconnectPagarmeIntegration(userId, slug);
     if (res.success) {
       toast.info("Pagar.me desconectada com sucesso.");
       setIsPagarmeModalOpen(false);
@@ -168,7 +252,7 @@ export function IntegrationsList({
   };
 
   const handleDisconnectNuvemshop = async () => {
-    const res = await disconnectNuvemshopIntegration(userId);
+    const res = await disconnectNuvemshopIntegration(userId, slug);
     if (res?.success) {
       toast.info("Nuvemshop desconectada com sucesso.");
       setIsNuvemshopModalOpen(false);
@@ -184,10 +268,12 @@ export function IntegrationsList({
     if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
       if (urlParams.get("success") === "meta_connected") {
-        setIsFbConnected(true);
-        localStorage.setItem("meta_connected_sim", "true");
-        toast.success("Meta Ads conectado com sucesso!");
-        window.history.replaceState(null, "", window.location.pathname);
+        setTimeout(() => {
+          setIsFbConnected(true);
+          // 🔥 Removemos a gravação no localStorage falso
+          toast.success("Meta Ads conectado com sucesso!");
+          window.history.replaceState(null, "", window.location.pathname);
+        }, 0);
       }
     }
   }, []);
@@ -222,7 +308,7 @@ export function IntegrationsList({
       id: "nuvemshop",
       name: "Nuvemshop",
       url: "nuvemshop.com.br",
-      logoUrl: "/logos/nuvemshop.jpg",
+      logoUrl: "/logos/nuvemshop.png",
       description:
         "Plataforma de e-commerce líder na América Latina. Gestão completa da sua loja.",
       isConnected: isNuvemshopConnected,
@@ -231,14 +317,15 @@ export function IntegrationsList({
       logoClass: "rounded-md",
     },
     {
-      id: "facebook",
-      name: "Facebook Ads",
+      id: "meta",
+      name: "Meta Ads",
       url: "business.facebook.com",
-      logoUrl: "/logos/facebook.svg",
+      logoUrl: "/logos/meta.png",
       description:
         "Sincronize o pixel e API de conversões para otimizar suas campanhas.",
-      isConnected: isFbConnected,
+      isConnected: isFbConnected, // 🔥 Agora usa o estado conectado com o backend
       category: "marketing",
+      logoClass: "scale-[1.4]",
       isComingSoon: false,
     },
     {
@@ -281,7 +368,7 @@ export function IntegrationsList({
       logoUrl: "/logos/pagar-me.png",
       description:
         "Processe pagamentos com cartão, boleto e Pix com alta conversão.",
-      isConnected: isPagarmeConnected, // 🔥 CORRIGIDO! Antes estava isAppmaxConnected
+      isConnected: isPagarmeConnected,
       category: "gateway",
       isComingSoon: false,
       logoClass: "rounded-md",
@@ -315,7 +402,7 @@ export function IntegrationsList({
       logoUrl: "/logos/shopify.svg",
       description:
         "Checkout nativo e gateway oficial da Shopify. Rastreie vendas locais.",
-      isConnected: isShopifyConnected,
+      isConnected: isShopifyPaymentsConnected,
       category: "checkout",
       isComingSoon: false,
     },
@@ -400,26 +487,62 @@ export function IntegrationsList({
   return (
     <>
       <div className="space-y-8 lg:w-[140%] transition-all duration-300">
-        <div className="flex flex-wrap items-center gap-2 pb-2 border-b border-border/50">
-          {CATEGORIES.map((tab) => {
-            const Icon = tab.icon;
-            const isActive = activeTab === tab.id;
-            return (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
+        <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-2 border-b border-border/50">
+          <div className="flex flex-wrap items-center gap-2">
+            {CATEGORIES.map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={cn(
+                    "flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium transition-all border",
+                    isActive
+                      ? "bg-foreground text-background border-foreground shadow-sm"
+                      : "bg-transparent text-muted-foreground border-transparent hover:bg-muted/50 hover:text-foreground",
+                  )}
+                >
+                  <Icon size={14} />
+                  {tab.label}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="flex items-center gap-3 bg-muted/40 px-3 py-1.5 rounded-lg border border-border/50">
+            <span className="text-xs font-medium text-muted-foreground flex items-center gap-1.5">
+              <Lock
+                size={12}
+                className={isLimitReached ? "text-red-500" : "text-blue-500"}
+              />
+              Integrações do Plano:
+            </span>
+            <div className="flex items-center gap-1.5">
+              <span
                 className={cn(
-                  "flex items-center gap-2 px-4 py-2 rounded-full text-xs font-medium transition-all border",
-                  isActive
-                    ? "bg-foreground text-background border-foreground shadow-sm"
-                    : "bg-transparent text-muted-foreground border-transparent hover:bg-muted/50 hover:text-foreground",
+                  "text-sm font-bold",
+                  isLimitReached ? "text-red-500" : "text-foreground",
                 )}
               >
-                <Icon size={14} />
-                {tab.label}
-              </button>
-            );
-          })}
+                {activeIntegrationsCount}
+              </span>
+              <span className="text-muted-foreground text-xs">/</span>
+              <span className="text-sm font-bold text-muted-foreground">
+                {maxIntegrations}
+              </span>
+            </div>
+            {isLimitReached && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={() => router.push("/settings/billing")}
+                className="h-6 text-[10px] bg-blue-600/10 text-blue-500 hover:bg-blue-600/20 hover:text-blue-600 ml-2"
+              >
+                Fazer Upgrade
+              </Button>
+            )}
+          </div>
         </div>
 
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
@@ -436,7 +559,7 @@ export function IntegrationsList({
                     <h3 className="text-xl font-bold text-foreground tracking-tight flex items-center gap-2">
                       {app.name}
                       {app.isConnected &&
-                        (app.id === "facebook" ||
+                        (app.id === "meta" ||
                           app.id === "yampi" ||
                           app.id === "cartpanda" ||
                           app.id === "shopify" ||
@@ -487,58 +610,62 @@ export function IntegrationsList({
               </div>
               <div className="p-4 border-t border-border/50 bg-muted/30 rounded-b-xl transition-colors">
                 {app.id === "ml" ? (
-                  <form action={connectMercadoLivreAction} className="w-full">
-                    <Button
-                      type="submit"
-                      disabled={app.isConnected}
-                      variant={app.isConnected ? "outline" : "default"}
-                      className={cn(
-                        "w-full h-10 gap-2 justify-center transition-all font-medium text-xs rounded-lg shadow-sm",
-                        app.isConnected
-                          ? "bg-emerald-500/10 text-emerald-600 border-emerald-500/20 hover:bg-emerald-500/20 dark:text-emerald-400 cursor-default"
-                          : "bg-foreground text-background hover:bg-foreground/90",
-                      )}
-                    >
-                      {app.isConnected ? (
-                        <>
-                          <div className="relative flex h-2 w-2 mr-1">
-                            <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                            <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                          </div>
-                          Conectado
-                        </>
-                      ) : (
-                        <>
-                          <div className="h-2 w-2 rounded-full bg-red-500 mr-1 shadow-[0_0_6px_rgba(239,68,68,0.6)]" />
-                          Conectar
-                        </>
-                      )}
-                    </Button>
-                  </form>
-                ) : app.id === "facebook" ? (
                   app.isConnected ? (
                     <div className="flex items-center gap-2 w-full animate-in fade-in duration-300">
                       <Button
-                        onClick={() => setIsFbModalOpen(true)}
-                        className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white gap-2 h-10 text-xs shadow-sm"
+                        onClick={() => setIsMlModalOpen(true)}
+                        className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white gap-2 h-10 text-xs shadow-sm cursor-pointer"
                       >
-                        <Settings2 size={14} /> Configurar Ativos
+                        <Settings2 size={14} /> Gerenciar Lojas
                       </Button>
+
                       <Button
-                        onClick={handleDisconnectFacebook}
+                        onClick={handleDisconnectML}
                         variant="outline"
                         size="icon"
-                        className="h-10 w-10 border-red-500/20 text-red-500 hover:bg-red-500/10 shrink-0 transition-colors"
+                        className="h-10 w-10 border-red-500/20 text-red-500 hover:bg-red-500/10 shrink-0 transition-colors cursor-pointer"
                       >
                         <Unplug size={14} />
                       </Button>
                     </div>
                   ) : (
                     <Button
-                      onClick={handleConnectFacebook}
-                      className="w-full h-10 gap-2 justify-center font-medium text-xs rounded-lg shadow-sm bg-foreground text-background hover:bg-foreground/90 transition-all"
+                      onClick={() =>
+                        handleConnectionAttempt(() => setIsMlModalOpen(true))
+                      }
+                      className="group relative overflow-hidden w-full h-10 gap-2 justify-center font-medium text-xs rounded-lg shadow-sm border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 hover:scale-100 active:scale-95 transition-all duration-300 ease-out hover:border-blue-400 text-white cursor-pointer"
                     >
-                      <Settings2 size={14} /> Configurar Webhook
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out"></div>
+                      <Settings2 size={14} /> Conectar Mercado Livre
+                    </Button>
+                  )
+                ) : app.id === "meta" ? (
+                  app.isConnected ? (
+                    <div className="flex items-center gap-2 w-full animate-in fade-in duration-300">
+                      <Button
+                        onClick={() => setIsFbModalOpen(true)}
+                        className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white gap-2 h-10 text-xs shadow-sm cursor-pointer"
+                      >
+                        <Settings2 size={14} /> Configurar Ativos
+                      </Button>
+                      <Button
+                        onClick={handleDisconnectMeta}
+                        variant="outline"
+                        size="icon"
+                        className="h-10 w-10 border-red-500/20 text-red-500 hover:bg-red-500/10 shrink-0 transition-colors cursor-pointer"
+                      >
+                        <Unplug size={14} />
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      onClick={() =>
+                        handleConnectionAttempt(() => setIsFbModalOpen(true))
+                      }
+                      className="group relative overflow-hidden w-full h-10 gap-2 justify-center font-medium text-xs rounded-lg shadow-sm border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 hover:scale-100 active:scale-95 transition-all duration-300 ease-out hover:border-blue-400 text-white cursor-pointer"
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out"></div>
+                      <Settings2 size={14} /> Conectar Meta
                     </Button>
                   )
                 ) : app.id === "yampi" ? (
@@ -561,10 +688,13 @@ export function IntegrationsList({
                     </div>
                   ) : (
                     <Button
-                      onClick={() => setIsYampiModalOpen(true)}
-                      className="w-full h-10 gap-2 justify-center font-medium text-xs rounded-lg shadow-sm bg-foreground text-background hover:bg-foreground/90 transition-all"
+                      onClick={() =>
+                        handleConnectionAttempt(() => setIsYampiModalOpen(true))
+                      }
+                      className="group relative overflow-hidden w-full h-10 gap-2 justify-center font-medium text-xs rounded-lg shadow-sm border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 hover:scale-100 active:scale-95 transition-all duration-300 ease-out hover:border-blue-400 text-white cursor-pointer"
                     >
-                      <Settings2 size={14} /> Configurar Webhook
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out"></div>
+                      <Settings2 size={14} /> Conectar Yampi
                     </Button>
                   )
                 ) : app.id === "cartpanda" ? (
@@ -572,7 +702,7 @@ export function IntegrationsList({
                     <div className="flex items-center gap-2 w-full animate-in fade-in duration-300">
                       <Button
                         onClick={() => setIsCartpandaModalOpen(true)}
-                        className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white gap-2 h-10 text-xs shadow-sm"
+                        className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white gap-2 h-10 text-xs shadow-sm cursor-pointer"
                       >
                         <Settings2 size={14} /> Ver Webhook
                       </Button>
@@ -580,17 +710,22 @@ export function IntegrationsList({
                         onClick={handleDisconnectCartpanda}
                         variant="outline"
                         size="icon"
-                        className="h-10 w-10 border-red-500/20 text-red-500 hover:bg-red-500/10 shrink-0 transition-colors"
+                        className="h-10 w-10 border-red-500/20 text-red-500 hover:bg-red-500/10 shrink-0 transition-colors cursor-pointer"
                       >
                         <Unplug size={14} />
                       </Button>
                     </div>
                   ) : (
                     <Button
-                      onClick={() => setIsCartpandaModalOpen(true)}
-                      className="w-full h-10 gap-2 justify-center font-medium text-xs rounded-lg shadow-sm bg-foreground text-background hover:bg-foreground/90 transition-all"
+                      onClick={() =>
+                        handleConnectionAttempt(() =>
+                          setIsCartpandaModalOpen(true),
+                        )
+                      }
+                      className="group relative overflow-hidden w-full h-10 gap-2 justify-center font-medium text-xs rounded-lg shadow-sm border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 hover:scale-100 active:scale-95 transition-all duration-300 ease-out hover:border-blue-400 text-white cursor-pointer"
                     >
-                      <Settings2 size={14} /> Configurar Webhook
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out"></div>
+                      <Settings2 size={14} /> Conectar Cartpanda
                     </Button>
                   )
                 ) : app.id === "appmax" ? (
@@ -598,7 +733,7 @@ export function IntegrationsList({
                     <div className="flex items-center gap-2 w-full animate-in fade-in duration-300">
                       <Button
                         onClick={() => setIsAppmaxModalOpen(true)}
-                        className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white gap-2 h-10 text-xs shadow-sm"
+                        className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white gap-2 h-10 text-xs shadow-sm cursor-pointer"
                       >
                         <Settings2 size={14} /> Ver Webhook
                       </Button>
@@ -606,17 +741,22 @@ export function IntegrationsList({
                         onClick={handleDisconnectAppmax}
                         variant="outline"
                         size="icon"
-                        className="h-10 w-10 border-red-500/20 text-red-500 hover:bg-red-500/10 shrink-0 transition-colors"
+                        className="h-10 w-10 border-red-500/20 text-red-500 hover:bg-red-500/10 shrink-0 transition-colors cursor-pointer"
                       >
                         <Unplug size={14} />
                       </Button>
                     </div>
                   ) : (
                     <Button
-                      onClick={() => setIsAppmaxModalOpen(true)}
-                      className="w-full h-10 gap-2 justify-center font-medium text-xs rounded-lg shadow-sm bg-foreground text-background hover:bg-foreground/90 transition-all"
+                      onClick={() =>
+                        handleConnectionAttempt(() =>
+                          setIsAppmaxModalOpen(true),
+                        )
+                      }
+                      className="group relative overflow-hidden w-full h-10 gap-2 justify-center font-medium text-xs rounded-lg shadow-sm border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 hover:scale-100 active:scale-95 transition-all duration-300 ease-out hover:border-blue-400 text-white cursor-pointer"
                     >
-                      <Settings2 size={14} /> Configurar Webhook
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out"></div>
+                      <Settings2 size={14} /> Conectar Appmax
                     </Button>
                   )
                 ) : app.id === "pagarme" ? (
@@ -624,7 +764,7 @@ export function IntegrationsList({
                     <div className="flex items-center gap-2 w-full animate-in fade-in duration-300">
                       <Button
                         onClick={() => setIsPagarmeModalOpen(true)}
-                        className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white gap-2 h-10 text-xs shadow-sm"
+                        className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white gap-2 h-10 text-xs shadow-sm cursor-pointer"
                       >
                         <Settings2 size={14} /> Ver Webhook
                       </Button>
@@ -632,69 +772,114 @@ export function IntegrationsList({
                         onClick={handleDisconnectPagarme}
                         variant="outline"
                         size="icon"
-                        className="h-10 w-10 border-red-500/20 text-red-500 hover:bg-red-500/10 shrink-0 transition-colors"
+                        className="h-10 w-10 border-red-500/20 text-red-500 hover:bg-red-500/10 shrink-0 transition-colors cursor-pointer"
                       >
                         <Unplug size={14} />
                       </Button>
                     </div>
                   ) : (
                     <Button
-                      onClick={() => setIsPagarmeModalOpen(true)}
-                      className="w-full h-10 gap-2 justify-center font-medium text-xs rounded-lg shadow-sm bg-foreground text-background hover:bg-foreground/90 transition-all"
+                      onClick={() =>
+                        handleConnectionAttempt(() =>
+                          setIsPagarmeModalOpen(true),
+                        )
+                      }
+                      className="group relative overflow-hidden w-full h-10 gap-2 justify-center font-medium text-xs rounded-lg shadow-sm border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 hover:scale-100 active:scale-95 transition-all duration-300 ease-out hover:border-blue-400 text-white cursor-pointer"
                     >
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out"></div>
                       <Settings2 size={14} /> Conectar Pagar.me
                     </Button>
                   )
-                ) : app.id === "shopify" || app.id === "shopify_payments" ? (
+                ) : app.id === "shopify" ? (
                   app.isConnected ? (
                     <div className="flex items-center gap-2 w-full animate-in fade-in duration-300">
                       <Button
                         onClick={() => setIsShopifyModalOpen(true)}
-                        className="flex-1 bg-[#95BF47] hover:bg-[#82a83e] text-white gap-2 h-10 text-xs shadow-sm font-medium"
+                        className="flex-1 bg-[#95BF47] hover:bg-[#82a83e] text-white gap-2 h-10 text-xs shadow-sm font-medium cursor-pointer"
                       >
-                        <Settings2 size={14} /> Ver Webhook
+                        <Settings2 size={14} /> Ver Integração
                       </Button>
                       <Button
                         onClick={handleDisconnectShopify}
                         variant="outline"
                         size="icon"
-                        className="h-10 w-10 border-red-500/20 text-red-500 hover:bg-red-500/10 shrink-0 transition-colors"
+                        className="h-10 w-10 border-red-500/20 text-red-500 hover:bg-red-500/10 shrink-0 transition-colors cursor-pointer"
                       >
                         <Unplug size={14} />
                       </Button>
                     </div>
                   ) : (
                     <Button
-                      onClick={() => setIsShopifyModalOpen(true)}
-                      className="w-full h-10 gap-2 justify-center font-medium text-xs rounded-lg shadow-sm bg-foreground text-background hover:bg-foreground/90 transition-all"
+                      onClick={() =>
+                        handleConnectionAttempt(() =>
+                          setIsShopifyModalOpen(true),
+                        )
+                      }
+                      className="group relative overflow-hidden w-full h-10 gap-2 justify-center font-medium text-xs rounded-lg shadow-sm border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 hover:scale-100 active:scale-95 transition-all duration-300 ease-out hover:border-blue-400 text-white cursor-pointer"
                     >
-                      <Settings2 size={14} /> Configurar Webhook
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out"></div>
+                      <Settings2 size={14} /> Conectar Shopify
+                    </Button>
+                  )
+                ) : app.id === "shopify_payments" ? (
+                  app.isConnected ? (
+                    <div className="flex items-center gap-2 w-full animate-in fade-in duration-300">
+                      <Button
+                        onClick={() => setIsShopifyPaymentsModalOpen(true)}
+                        className="flex-1 bg-[#95BF47] hover:bg-[#82a83e] text-white gap-2 h-10 text-xs shadow-sm font-medium cursor-pointer"
+                      >
+                        <Settings2 size={14} /> Ver Webhook
+                      </Button>
+                      <Button
+                        onClick={handleDisconnectShopifyPayments}
+                        variant="outline"
+                        size="icon"
+                        className="h-10 w-10 border-red-500/20 text-red-500 hover:bg-red-500/10 shrink-0 transition-colors cursor-pointer"
+                      >
+                        <Unplug size={14} />
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      onClick={() =>
+                        handleConnectionAttempt(() =>
+                          setIsShopifyPaymentsModalOpen(true),
+                        )
+                      }
+                      className="group relative overflow-hidden w-full h-10 gap-2 justify-center font-medium text-xs rounded-lg shadow-sm border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 hover:scale-100 active:scale-95 transition-all duration-300 ease-out hover:border-blue-400 text-white cursor-pointer"
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out"></div>
+                      <Settings2 size={14} /> Conectar Payments
                     </Button>
                   )
                 ) : app.id === "nuvemshop" ? (
-                  // 🔥 RENDERIZAÇÃO NOVA DO BOTÃO DA NUVEMSHOP
                   app.isConnected ? (
                     <div className="flex items-center gap-2 w-full animate-in fade-in duration-300">
                       <Button
                         onClick={() => setIsNuvemshopModalOpen(true)}
-                        className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white gap-2 h-10 text-xs shadow-sm"
+                        className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white gap-2 h-10 text-xs shadow-sm cursor-pointer"
                       >
-                        <Settings2 size={14} /> Ver Webhook
+                        <Settings2 size={14} /> Ver Integração
                       </Button>
                       <Button
                         onClick={handleDisconnectNuvemshop}
                         variant="outline"
                         size="icon"
-                        className="h-10 w-10 border-red-500/20 text-red-500 hover:bg-red-500/10 shrink-0 transition-colors"
+                        className="h-10 w-10 border-red-500/20 text-red-500 hover:bg-red-500/10 shrink-0 transition-colors cursor-pointer"
                       >
                         <Unplug size={14} />
                       </Button>
                     </div>
                   ) : (
                     <Button
-                      onClick={() => setIsNuvemshopModalOpen(true)}
-                      className="w-full h-10 gap-2 justify-center font-medium text-xs rounded-lg shadow-sm bg-foreground text-background hover:bg-foreground/90 transition-all"
+                      onClick={() =>
+                        handleConnectionAttempt(() =>
+                          setIsNuvemshopModalOpen(true),
+                        )
+                      }
+                      className="group relative overflow-hidden w-full h-10 gap-2 justify-center font-medium text-xs rounded-lg shadow-sm border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 hover:scale-100 active:scale-95 transition-all duration-300 ease-out hover:border-blue-400 text-white cursor-pointer"
                     >
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out"></div>
                       <Settings2 size={14} /> Conectar Nuvemshop
                     </Button>
                   )
@@ -732,10 +917,14 @@ export function IntegrationsList({
       </div>
 
       {/* MODAIS AQUI EMBAIXO */}
-      <MetaAssetsSheet
+      <MercadoLivreSheet
+        open={isMlModalOpen}
+        onOpenChange={setIsMlModalOpen}
+        connectedStores={mlStores}
+      />
+      <MetaAdsSheet
         open={isFbModalOpen}
         onOpenChange={setIsFbModalOpen}
-        onReconnect={handleConnectFacebook}
         userId={userId}
       />
 
@@ -744,39 +933,50 @@ export function IntegrationsList({
         onOpenChange={setIsYampiModalOpen}
         userId={userId}
         existingUrl={yampiUrl}
+        workspaceId={slug}
       />
-
       <CartpandaSheet
         open={isCartpandaModalOpen}
         onOpenChange={setIsCartpandaModalOpen}
         userId={userId}
         existingUrl={cartpandaUrl}
+        workspaceId={slug}
       />
-
       <ShopifySheet
         open={isShopifyModalOpen}
         onOpenChange={setIsShopifyModalOpen}
         userId={userId}
         existingStore={shopifyDomain}
+        workspaceId={slug}
       />
-
+      <ShopifyPaymentsSheet
+        open={isShopifyPaymentsModalOpen}
+        onOpenChange={setIsShopifyPaymentsModalOpen}
+        userId={userId}
+        existingUrl={shopifyPaymentsUrl}
+        workspaceId={slug}
+      />
       <AppmaxSheet
         open={isAppmaxModalOpen}
         onOpenChange={setIsAppmaxModalOpen}
         existingUrl={appmaxUrl}
+        userId={userId}
+        workspaceId={slug}
       />
-
       <PagarmeSheet
         open={isPagarmeModalOpen}
         onOpenChange={setIsPagarmeModalOpen}
         existingUrl={pagarmeUrl}
+        userId={userId}
+        workspaceId={slug}
       />
-
       <NuvemshopSheet
+        userId={userId}
         open={isNuvemshopModalOpen}
         onOpenChange={setIsNuvemshopModalOpen}
         isConnected={isNuvemshopConnected}
         storeName={nuvemshopStoreName}
+        workspaceId={slug}
       />
     </>
   );

@@ -4,7 +4,7 @@ import prisma from "@/lib/prisma";
 import { revalidatePath } from "next/cache";
 import { auth } from "@/lib/auth"; // Certifique-se que o caminho está certo
 import { headers } from "next/headers"; // <--- NECESSÁRIO PARA BETTER AUTH
-import { Product } from "@/app/(private)/products/columns";
+import { Product } from "@/app/(private)/[slug]/products/columns";
 
 type PrismaProduct = NonNullable<
   Awaited<ReturnType<typeof prisma.product.findFirst>>

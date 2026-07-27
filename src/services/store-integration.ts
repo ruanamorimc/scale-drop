@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import { StorePlatform } from "@/generated/prisma/client";
+import { IntegrationProvider } from "@/generated/prisma/client";
 
 // Tipagem do que o Mercado Livre devolve
 interface MLTokenResponse {
@@ -12,6 +12,7 @@ interface MLTokenResponse {
 export async function updateIntegrationTokens(
   userId: string,
   data: MLTokenResponse,
+  workspaceId: string,
 ) {
   // 1. Verificação de Segurança
   // Se o Mercado Livre não mandou o user_id, não temos como salvar a loja correta.
@@ -21,7 +22,7 @@ export async function updateIntegrationTokens(
     );
     return; // Para a execução aqui para não quebrar o banco
   }
-  
+
   // Calculamos a data exata que vai vencer (Agora + Segundos que o ML mandou)
   const expiresAt = new Date(Date.now() + data.expires_in * 1000);
   const storeId = data.user_id.toString(); // O ID da loja no ML
@@ -31,10 +32,10 @@ export async function updateIntegrationTokens(
   // Se não existe, ele CRIA uma nova.
   await prisma.storeIntegration.upsert({
     where: {
-      userId_platform_storeId: {
-        // A chave única composta do seu banco
-        userId: userId,
-        platform: StorePlatform.MERCADO_LIVRE, // Usando o Enum
+      // 1. Mudamos a chave de busca para usar o workspaceId
+      workspaceId_platform_storeId: {
+        workspaceId: workspaceId,
+        platform: IntegrationProvider.MERCADO_LIVRE,
         storeId: storeId,
       },
     },
@@ -47,9 +48,10 @@ export async function updateIntegrationTokens(
     },
     create: {
       userId: userId,
-      platform: StorePlatform.MERCADO_LIVRE,
+      workspaceId: workspaceId, // 2. Adicionamos o workspaceId na criação!
+      platform: IntegrationProvider.MERCADO_LIVRE,
       storeId: storeId,
-      storeName: `Mercado Livre - ${storeId}`, // Nome provisório obrigatório
+      storeName: `Mercado Livre - ${storeId}`,
       accessToken: data.access_token,
       refreshToken: data.refresh_token,
       tokenExpiresAt: expiresAt,

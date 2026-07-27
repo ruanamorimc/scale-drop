@@ -18,29 +18,28 @@ import {
   SheetTitle,
   SheetDescription,
 } from "@/components/ui/sheet";
-
 import {
-  getOrGenerateAppmaxWebhook,
-  disconnectAppmaxIntegration,
-} from "@/actions/appmax-actions";
+  saveShopifyPaymentsIntegration,
+  disconnectShopifyPaymentsIntegration,
+} from "@/actions/shopify-actions";
 import Image from "next/image";
 
-interface AppmaxSheetProps {
+interface ShopifyPaymentsSheetProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  existingUrl?: string | null;
   userId: string;
-  workspaceId: string; // 🔥 Adicionado o workspaceId na interface
+  workspaceId: string; // 🔥 Adicionado workspaceId na interface
+  existingUrl?: string | null;
 }
 
-export function AppmaxSheet({
+export function ShopifyPaymentsSheet({
   open,
   onOpenChange,
-  existingUrl,
   userId,
-  workspaceId, // 🔥 Recebendo a prop
-}: AppmaxSheetProps) {
-  const [storeName, setStoreName] = useState("Minha Loja Appmax");
+  workspaceId, // 🔥 Recebendo workspaceId como prop
+  existingUrl,
+}: ShopifyPaymentsSheetProps) {
+  const [name, setName] = useState("Shopify Payments");
   const [isLoading, setIsLoading] = useState(false);
   const [generatedUrl, setGeneratedUrl] = useState<string | null>(null);
 
@@ -51,52 +50,42 @@ export function AppmaxSheet({
           setGeneratedUrl(existingUrl);
         } else {
           setGeneratedUrl(null);
-          setStoreName("Minha Loja Appmax");
+          setName("Shopify Payments");
         }
       }, 0);
       return () => clearTimeout(timer);
     }
   }, [open, existingUrl]);
 
-  // ==========================================
-  // LÓGICA DE CONECTAR
-  // ==========================================
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!storeName) return toast.error("Preencha o nome da integração.");
-
     setIsLoading(true);
-    // 🔥 Repassando o workspaceId para a Action
-    const res = await getOrGenerateAppmaxWebhook(
-      userId,
-      workspaceId,
-      storeName,
-    );
 
-    if (res?.success && res.integrationId) {
-      const baseUrl = process.env.NEXT_PUBLIC_APP_URL || window.location.origin;
-      setGeneratedUrl(`${baseUrl}/api/webhooks/appmax?id=${res.integrationId}`);
-      toast.success("Webhook criado com sucesso!");
+    // 🔥 Passando workspaceId para a action
+    const res = await saveShopifyPaymentsIntegration(userId, workspaceId, {
+      name,
+    });
+
+    if (res.success && res.webhookUrl) {
+      setGeneratedUrl(res.webhookUrl);
+      toast.success("Webhook gerado com sucesso!");
     } else {
-      toast.error("Erro ao gerar webhook.");
+      toast.error(res.error || "Erro ao gerar webhook.");
     }
     setIsLoading(false);
   };
 
-  // ==========================================
-  // LÓGICA DE DESCONECTAR
-  // ==========================================
   const handleDisconnect = async () => {
     setIsLoading(true);
-    // 🔥 Repassando o workspaceId para a Action
-    const res = await disconnectAppmaxIntegration(userId, workspaceId);
+    // 🔥 Passando workspaceId para a action de desconexão
+    const res = await disconnectShopifyPaymentsIntegration(userId, workspaceId);
 
     if (res.success) {
-      toast.info("Appmax desconectada com sucesso.");
+      toast.info("Shopify Payments desconectado.");
       setGeneratedUrl(null);
       onOpenChange(false);
     } else {
-      toast.error("Erro ao desconectar Appmax.");
+      toast.error("Erro ao desconectar Shopify Payments.");
     }
     setIsLoading(false);
   };
@@ -115,17 +104,17 @@ export function AppmaxSheet({
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 bg-white dark:bg-zinc-900 border border-border/50 rounded-lg flex items-center justify-center shrink-0 shadow-sm overflow-hidden">
               <Image
-                src="/logos/appmax.png"
-                alt="Appmax"
+                src="/logos/shopify.svg"
+                alt="Shopify Payments"
                 width={26}
                 height={26}
                 className="object-contain"
               />
             </div>
             <div className="text-left">
-              <SheetTitle className="text-xl">Integração Appmax</SheetTitle>
+              <SheetTitle className="text-xl">Shopify Payments</SheetTitle>
               <SheetDescription>
-                Configure o Webhook para rastreio de vendas.
+                Configure o Webhook para rastreio de pagamentos nativos.
               </SheetDescription>
             </div>
           </div>
@@ -133,54 +122,33 @@ export function AppmaxSheet({
 
         <div className="flex-1 overflow-y-auto p-6">
           {!generatedUrl ? (
-            <form id="appmaxForm" onSubmit={handleSave} className="space-y-6">
+            <form id="spForm" onSubmit={handleSave} className="space-y-6">
               <div className="bg-amber-500/10 border border-amber-500/20 p-4 rounded-xl">
                 <p className="text-sm text-amber-500 font-medium flex items-center gap-2">
-                  <ShieldCheck size={16} /> Configuração via Apphook
+                  <ShieldCheck size={16} /> Configuração via Webhook
                 </p>
-                <p className="text-xs text-amber-500/80 mt-1">
-                  Vá na Appmax em Configurações &gt; Apphooks &gt; Novo Webhook.
-                  Copie a URL que será gerada abaixo e selecione os eventos
-                  obrigatórios.
+                <p className="text-xs text-amber-500/80 mt-1 leading-relaxed">
+                  Para rastrear vendas processadas pelo gateway nativo da
+                  Shopify, gere a URL abaixo. Em seguida, vá na Shopify em{" "}
+                  <strong>Configurações &gt; Notificações &gt; Webhooks</strong>
+                  , crie um novo webhook para o evento de{" "}
+                  <strong>Pagamento do Pedido</strong> (Formato JSON) e cole a
+                  URL gerada.
                 </p>
               </div>
 
               <div className="space-y-4">
                 <div>
                   <label className="text-xs font-semibold text-foreground mb-1.5 block uppercase tracking-wider">
-                    Nome da Integração
+                    Identificação do Webhook
                   </label>
                   <input
-                    value={storeName}
-                    onChange={(e) => setStoreName(e.target.value)}
-                    placeholder="Ex: Minha Loja Appmax"
+                    value={name}
+                    onChange={(e) => setName(e.target.value)}
+                    placeholder="Shopify Payments"
                     className="flex h-10 w-full rounded-md border border-border/60 bg-background px-3 py-2 text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                     required
                   />
-                </div>
-
-                <div className="space-y-2 pt-2">
-                  <label className="text-xs font-semibold text-foreground block uppercase tracking-wider text-left">
-                    Eventos Obrigatórios na Appmax
-                  </label>
-                  <div className="grid grid-cols-2 gap-2 text-[11px] text-muted-foreground bg-muted/20 border border-border/50 p-4 rounded-lg">
-                    <ul className="space-y-2 list-inside list-disc">
-                      <li>Pedido aprovado</li>
-                      <li>Pedido autorizado</li>
-                      <li>Boleto Gerado</li>
-                      <li>Pedido pago</li>
-                      <li>Pedido Estornado</li>
-                      <li>Upsell pago</li>
-                    </ul>
-                    <ul className="space-y-2 list-inside list-disc">
-                      <li>Pix Gerado</li>
-                      <li>Pix Pago</li>
-                      <li>Pedido integrado</li>
-                      <li>Ped. Autorizado (atraso)</li>
-                      <li>Pag. não autorizado</li>
-                      <li>Pag. não aut. (atraso)</li>
-                    </ul>
-                  </div>
                 </div>
               </div>
             </form>
@@ -192,13 +160,12 @@ export function AppmaxSheet({
                 </div>
                 <h3 className="text-lg font-bold text-foreground">
                   {existingUrl === generatedUrl
-                    ? "Seu Webhook da Appmax"
+                    ? "Seu Webhook de Pagamento"
                     : "Webhook gerado com sucesso!"}
                 </h3>
                 <p className="text-sm text-muted-foreground">
-                  {existingUrl === generatedUrl
-                    ? "Copie o link abaixo se precisar cadastrar novamente."
-                    : "Agora basta colar o link abaixo lá na Appmax."}
+                  Copie o link abaixo e cadastre nas Notificações (Webhooks) da
+                  sua Shopify.
                 </p>
               </div>
 
@@ -256,9 +223,9 @@ export function AppmaxSheet({
             </Button>
             <Button
               type="submit"
-              form="appmaxForm"
+              form="spForm"
               disabled={isLoading}
-              className="group relative overflow-hidden gap-2 justify-center font-medium text-xs rounded-lg shadow-sm border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 hover:scale-100 active:scale-95 transition-all duration-300 ease-out hover:border-blue-400 text-white cursor-pointer min-w-[140px] cursor-pointer"
+              className="group relative overflow-hidden gap-2 justify-center font-medium text-xs rounded-lg shadow-sm border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 hover:scale-100 active:scale-95 transition-all duration-300 ease-out hover:border-blue-400 text-white cursor-pointer min-w-[140px]"
             >
               <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out"></div>
               <LinkIcon size={14} />

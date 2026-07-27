@@ -1,9 +1,8 @@
 "use client";
 
-import { IconCirclePlusFilled, IconMail } from "@tabler/icons-react";
-import { usePathname } from "next/navigation";
+// 🔥 1. Importamos o useParams além do usePathname
+import { usePathname, useParams } from "next/navigation";
 
-import { Button } from "@/components/ui/button";
 import {
   SidebarGroup,
   SidebarGroupContent,
@@ -40,13 +39,12 @@ import {
 
 import { SidebarLink } from "./SidebarLink";
 
-// Adicionei 'exact: true' no "Visão Geral" e no "Resumo"
 const items = [
   {
     title: "Dashboard",
     url: "/dashboard",
     icon: LayoutGrid,
-    exact: true, // Dashboard geralmente é raiz
+    exact: true,
   },
   {
     title: "Pedidos",
@@ -69,7 +67,7 @@ const items = [
     icon: ChartArea,
     isActive: false,
     items: [
-      { title: "Visão Geral", url: "/finance", icon: PieChart, exact: true }, // 🔥 Adicionado exact
+      { title: "Visão Geral", url: "/finance", icon: PieChart, exact: true },
       { title: "Taxas", url: "/finance/fees", icon: Percent },
       { title: "Impostos", url: "/finance/taxes", icon: DollarSign },
       { title: "Calculadora", url: "/finance/calculator", icon: Calculator },
@@ -81,7 +79,7 @@ const items = [
     icon: Megaphone,
     isActive: false,
     items: [
-      { title: "Resumo", url: "/marketing", icon: PanelsTopLeft, exact: true }, // 🔥 Adicionado exact
+      { title: "Resumo", url: "/marketing", icon: PanelsTopLeft, exact: true },
       { title: "Meta", url: "/marketing/meta", icon: Facebook },
       { title: "Google", url: "/marketing/google", icon: Youtube },
       { title: "UTMs", url: "/marketing/utms", icon: Clipboard },
@@ -91,41 +89,26 @@ const items = [
   },
 ];
 
-export function NavMain() {
+export function NavMain({ fallbackSlug }: { fallbackSlug: string }) {
   const pathname = usePathname();
+  const params = useParams();
+
+  // 🔥 A MÁGICA: Tenta pegar da URL, se for undefined, pega do banco!
+  const slug = (params.slug as string) || fallbackSlug;
 
   return (
     <SidebarGroup>
       <SidebarGroupContent className="flex flex-col gap-2">
-        {/* QUICK CREATE */}
-        <SidebarMenu>
-          <SidebarMenuItem className="flex items-center gap-2">
-            <SidebarMenuButton
-              tooltip="Quick Create"
-              className="bg-primary text-primary-foreground hover:bg-primary/90 hover:text-primary-foreground active:bg-primary/90 active:text-primary-foreground min-w-8 duration-200 ease-linear"
-            >
-              <IconCirclePlusFilled />
-              <span>Quick Create</span>
-            </SidebarMenuButton>
-            <Button
-              size="icon"
-              className="size-8 group-data-[collapsible=icon]:opacity-0"
-              variant="outline"
-            >
-              <IconMail />
-              <span className="sr-only">Inbox</span>
-            </Button>
-          </SidebarMenuItem>
-        </SidebarMenu>
-
         {/* MENU PRINCIPAL */}
         <SidebarMenu>
           {items.map((item) => {
-            const isChildActive = item.items?.some(
-              (subItem) =>
-                pathname === subItem.url ||
-                pathname.startsWith(`${subItem.url}/`),
-            );
+            // 🔥 3. Ajustamos a lógica de ativo para comparar com a URL completa (slug + url)
+            const isChildActive = item.items?.some((subItem) => {
+              const fullSubUrl = `/${slug}${subItem.url}`;
+              return (
+                pathname === fullSubUrl || pathname.startsWith(`${fullSubUrl}/`)
+              );
+            });
 
             // CASO 1: TEM SUBMENU
             if (item.items && item.items.length > 0) {
@@ -147,17 +130,22 @@ export function NavMain() {
 
                     <CollapsibleContent>
                       <SidebarMenuSub>
-                        {item.items.map((subItem) => (
-                          <SidebarMenuSubItem key={subItem.title}>
-                            <SidebarLink
-                              url={subItem.url}
-                              title={subItem.title}
-                              icon={subItem.icon}
-                              isSubItem={true}
-                              exact={(subItem as any).exact} // 🔥 Passa a prop exact
-                            />
-                          </SidebarMenuSubItem>
-                        ))}
+                        {item.items.map((subItem) => {
+                          // 🔥 4. Montamos a URL completa do submenu antes de passar para o SidebarLink
+                          const fullSubUrl = `/${slug}${subItem.url}`;
+
+                          return (
+                            <SidebarMenuSubItem key={subItem.title}>
+                              <SidebarLink
+                                url={fullSubUrl} // Passando a nova URL
+                                title={subItem.title}
+                                icon={subItem.icon}
+                                isSubItem={true}
+                                exact={(subItem as any).exact}
+                              />
+                            </SidebarMenuSubItem>
+                          );
+                        })}
                       </SidebarMenuSub>
                     </CollapsibleContent>
                   </SidebarMenuItem>
@@ -166,13 +154,16 @@ export function NavMain() {
             }
 
             // CASO 2: ITEM SIMPLES
+            // 🔥 5. Montamos a URL completa do item principal (ignorando se for "#")
+            const fullUrl = item.url === "#" ? "#" : `/${slug}${item.url}`;
+
             return (
               <SidebarMenuItem key={item.title}>
                 <SidebarLink
-                  url={item.url}
+                  url={fullUrl} // Passando a nova URL
                   title={item.title}
                   icon={item.icon}
-                  exact={(item as any).exact} // 🔥 Passa a prop exact
+                  exact={(item as any).exact}
                 />
               </SidebarMenuItem>
             );

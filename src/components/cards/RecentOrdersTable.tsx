@@ -1,22 +1,24 @@
 import { DataTable } from "@/components/data-table/DataTable";
-import { columns } from "@/app/(private)/orders/columns";
+import { columns } from "@/app/(private)/[slug]/orders/columns";
 import { PremiumCard } from "@/components/cards/PremiumCard";
 import { getRecentOrders } from "@/actions/get-recent-orders";
 
-// 1. Adicionamos o productId na tipagem para repassar o filtro
+// 🔥 1. Adicionamos o workspaceId como obrigatório na tipagem
 interface RecentOrdersTableProps {
+  workspaceId: string;
   from?: Date;
   to?: Date;
   productId?: string;
 }
 
 export async function RecentOrdersTable({
+  workspaceId,
   from,
   to,
   productId,
 }: RecentOrdersTableProps) {
-  // 2. Repassamos o productId para a Action
-  const data = await getRecentOrders(from, to, productId);
+  // 🔥 2. Repassamos o workspaceId como o PRIMEIRO parâmetro para a Action
+  const data = await getRecentOrders(workspaceId, from, to, productId);
 
   return (
     <PremiumCard className="w-full overflow-hidden">

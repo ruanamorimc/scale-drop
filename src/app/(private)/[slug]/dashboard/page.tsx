@@ -1,5 +1,6 @@
 import { getServerSession } from "@/lib/get-session";
 import { unauthorized } from "next/navigation";
+import prisma from "@/lib/prisma"; // 🔥 Adicionamos o Prisma
 import { SummaryCards } from "@/components/cards/SummaryCards";
 import { ChartBarStacked } from "@/components/cards/ChartsArea";
 import { CardMetrics } from "@/components/cards/CardMetrics";
@@ -11,8 +12,10 @@ import { getFinanceMetrics } from "@/actions/finance-overview";
 import { DashboardProvider } from "@/components/dashboard/DashboardContext";
 
 export default async function DashboardPage({
+  params, // 🔥 1. Recebemos os params para pegar o slug
   searchParams,
 }: {
+  params: Promise<{ slug: string }>;
   searchParams: Promise<{ [key: string]: string | undefined }>;
 }) {
   const session = await getServerSession();
@@ -20,26 +23,35 @@ export default async function DashboardPage({
 
   if (!user) unauthorized();
 
-  // Aguarda os parâmetros da URL
-  const params = await searchParams;
+  // 🔥 2. Aguardamos e desempacotamos as Promises do Next.js 15
+  const { slug } = await params;
+  const query = await searchParams;
+
+  // 🔥 3. Busca o Workspace atual (Igualzinho na tela de integrações)
+  const currentWorkspace = await prisma.workspace.findUnique({
+    where: { slug: slug },
+  });
+
+  if (!currentWorkspace) {
+    return <div>Workspace não encontrado.</div>;
+  }
+
+  const workspaceId = currentWorkspace.id;
 
   let from: Date | undefined = undefined;
   let to: Date | undefined = undefined;
 
-  if (typeof params.from === "string") {
-    // Forçamos o fuso horário local (-03:00)
-    from = new Date(`${params.from}T00:00:00-03:00`);
+  if (typeof query.from === "string") {
+    from = new Date(`${query.from}T00:00:00-03:00`);
   }
 
-  if (typeof params.to === "string") {
-    // Forçamos o fuso horário local (-03:00)
-    to = new Date(`${params.to}T23:59:59-03:00`);
+  if (typeof query.to === "string") {
+    to = new Date(`${query.to}T23:59:59-03:00`);
   }
 
-  const financeData = await getFinanceMetrics(from, to);
+  // 🔥 4. PASSAMOS O WORKSPACE ID PARA A ACTION (Você precisará atualizar ela para receber esse parâmetro!)
+  const financeData = await getFinanceMetrics(workspaceId, from, to);
 
-  // 🔥 TRUQUE SÊNIOR: Forçamos o TypeScript a entender o formato do safeData
-  // baseando-se no retorno real da função getFinanceMetrics, eliminando o erro da linha 54 e sem usar "any".
   const safeData = financeData || ({} as NonNullable<typeof financeData>);
 
   return (
@@ -65,8 +77,8 @@ export default async function DashboardPage({
         </div>
 
         <div className="w-full overflow-hidden">
-          {/* 🔥 Agora sim! Injetamos as datas na tabela de Pedidos Recentes */}
-          <RecentOrdersTable from={from} to={to} />
+          {/* 🔥 5. Passamos o Workspace ID para a Tabela renderizar só pedidos desta loja */}
+          <RecentOrdersTable workspaceId={workspaceId} from={from} to={to} />
         </div>
       </main>
     </DashboardProvider>

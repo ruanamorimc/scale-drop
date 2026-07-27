@@ -1,10 +1,11 @@
 import { SidebarProvider } from "@/components/ui/sidebar";
-import { AppSidebar } from "@/components/sidebar";
+import { AppSidebar } from "@/components/sidebar/AppSidebar";
 import { getServerSession } from "@/lib/get-session";
 import { unauthorized } from "next/navigation";
 import { ThemeProvider } from "@/components/providers/ThemeProviders";
 import { Toaster } from "@/components/ui/sonner";
 import { WhatsAppFloat } from "@/components/WhatsAppFloat";
+import { cookies } from "next/headers";
 
 export default async function PrivateLayout({
   children,
@@ -16,6 +17,9 @@ export default async function PrivateLayout({
   }
   const userEmail = session?.user?.email;
 
+  const cookieStore = await cookies();
+  const defaultOpen = cookieStore.get("sidebar_state")?.value === "true";
+
   return (
     <ThemeProvider
       attribute="class"
@@ -23,10 +27,12 @@ export default async function PrivateLayout({
       enableSystem
       disableTransitionOnChange
     >
-      <SidebarProvider>
+      <SidebarProvider defaultOpen={defaultOpen}>
         <AppSidebar variant="floating" collapsible="icon" />
         <main className="flex flex-col flex-1 h-screen min-w-0">
-          <div className="px-4 px-4 flex-1 min-w-0 overflow-y-auto">{children}</div>
+          <div className="px-4 px-4 flex-1 min-w-0 overflow-y-auto">
+            {children}
+          </div>
 
           {/* 🔥 O NOVO TOASTER CYBERPUNK/NEON! */}
           {/* 🔥 O NOVO TOASTER CYBERPUNK/NEON (COM UNSTYLED TRUE) */}

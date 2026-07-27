@@ -5,11 +5,19 @@ import { revalidatePath } from "next/cache";
 
 export async function saveCartpandaIntegration(
   userId: string,
+  slug: string, // 🔥 Recebe o slug
   data: { name: string },
 ) {
   try {
+    const workspace = await prisma.workspace.findUnique({
+      where: { slug },
+    });
+
+    if (!workspace)
+      return { success: false, error: "Workspace não encontrado." };
+
     const existing = await prisma.storeIntegration.findFirst({
-      where: { userId, platform: "CARTPANDA" },
+      where: { userId, workspaceId: workspace.id, platform: "CARTPANDA" },
     });
 
     let integrationId = "";
@@ -27,9 +35,10 @@ export async function saveCartpandaIntegration(
       const created = await prisma.storeIntegration.create({
         data: {
           userId,
+          workspaceId: workspace.id, // 🔥 Salva com o ID real
           platform: "CARTPANDA",
           storeName: data.name,
-          accessToken: "", // 🔥 SOLUÇÃO AQUI: Passamos vazio para o Prisma não reclamar
+          accessToken: "",
           isConnected: true,
         },
       });
@@ -48,14 +57,26 @@ export async function saveCartpandaIntegration(
   }
 }
 
-export async function disconnectCartpandaIntegration(userId: string) {
+export async function disconnectCartpandaIntegration(
+  userId: string,
+  slug: string, // 🔥 Recebe o slug
+) {
   try {
-    await prisma.storeIntegration.deleteMany({
-      where: { userId, platform: "CARTPANDA" },
+    const workspace = await prisma.workspace.findUnique({
+      where: { slug },
     });
+
+    if (!workspace)
+      return { success: false, error: "Workspace não encontrado." };
+
+    await prisma.storeIntegration.deleteMany({
+      where: { userId, workspaceId: workspace.id, platform: "CARTPANDA" },
+    });
+
     revalidatePath("/settings/integrations");
     return { success: true };
   } catch (error) {
+    console.error("Erro ao desconectar Cartpanda:", error);
     return { success: false, error: "Falha ao desconectar." };
   }
 }

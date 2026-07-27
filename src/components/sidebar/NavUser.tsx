@@ -2,7 +2,8 @@
 
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
-import { useRouter } from "next/navigation";
+// 🔥 Importamos o useParams junto com o useRouter
+import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { useTheme } from "next-themes";
 
@@ -39,12 +40,16 @@ interface UserProps {
     image?: string | null;
     plan?: string;
   };
+  fallbackSlug: string; // 🔥 Adiciona aqui na Interface
 }
 
-export function NavUser({ user }: UserProps) {
+export function NavUser({ user, fallbackSlug }: UserProps) {
   const { isMobile } = useSidebar();
   const router = useRouter();
   const { theme, setTheme } = useTheme();
+
+  const params = useParams();
+  const slug = (params.slug as string) || fallbackSlug;
 
   const handleLogout = async () => {
     await authClient.signOut({
@@ -106,14 +111,13 @@ export function NavUser({ user }: UserProps) {
               <div className="grid flex-1 text-left text-sm leading-tight">
                 <div className="flex items-center gap-2">
                   <span className="truncate font-medium">{user.name}</span>
-                  {/* BADGE DO BOTÃO FECHADO */}
                   <span
                     className={cn(
                       "px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border",
-                      getPlanBadgeStyle(user.plan || "SCALE"),
+                      getPlanBadgeStyle(user.plan || "START"),
                     )}
                   >
-                    {user.plan || "SCALE"}
+                    {user.plan || "START"}
                   </span>
                 </div>
                 <span className="text-muted-foreground truncate text-xs">
@@ -140,14 +144,13 @@ export function NavUser({ user }: UserProps) {
                 <div className="grid flex-1 text-left text-sm leading-tight">
                   <div className="flex items-center gap-2">
                     <span className="truncate font-medium">{user.name}</span>
-                    {/* 🔥 BADGE DO MENU ABERTO (AGORA SINCRONIZADO E DINÂMICO!) */}
                     <span
                       className={cn(
                         "px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border",
-                        getPlanBadgeStyle(user.plan || "SCALE"),
+                        getPlanBadgeStyle(user.plan || "START"),
                       )}
                     >
-                      {user.plan || "SCALE"}
+                      {user.plan || "START"}
                     </span>
                   </div>
 
@@ -159,7 +162,6 @@ export function NavUser({ user }: UserProps) {
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
 
-            {/* ITEM DE TEMA (CLARO/ESCURO) */}
             <DropdownMenuGroup>
               <div className="flex items-center justify-between px-2 py-2 text-sm select-none">
                 <div className="flex items-center gap-2 text-muted-foreground">
@@ -183,19 +185,21 @@ export function NavUser({ user }: UserProps) {
 
             <DropdownMenuGroup>
               <DropdownMenuItem asChild>
-                <Link href="/settings">
+                {/* 🔥 Adicionamos o slug aqui */}
+                <Link href={`/${slug}/settings`}>
                   <IconUserCircle />
                   Perfil
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="/settings/billing">
+                {/* 🔥 E aqui também */}
+                <Link href={`/${slug}/settings/billing`}>
                   <IconCreditCard />
                   Cobrança
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                <Link href="/#">
+                <Link href="#">
                   <IconNotification />
                   Notificações
                 </Link>
@@ -203,7 +207,6 @@ export function NavUser({ user }: UserProps) {
             </DropdownMenuGroup>
             <DropdownMenuSeparator />
 
-            {/* LOGOUT */}
             <DropdownMenuItem onClick={handleLogout} variant="destructive">
               <IconLogout />
               Log out

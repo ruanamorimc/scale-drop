@@ -6,8 +6,8 @@ import { Button } from "@/components/ui/button";
 import { ArrowUpDown, Pencil, Trash2 } from "lucide-react";
 import { ProductStatusBadge } from "@/components/products/ProductStatusBadge";
 import { Info } from "lucide-react";
-import { Fee } from "@/app/(private)/finance/fees/columns";
-import { Tax } from "@/app/(private)/finance/taxes/columns";
+import { Fee } from "@/app/(private)/[workspaceId]/finance/fees/columns";
+import { Tax } from "@/app/(private)/[workspaceId]/finance/taxes/columns";
 import {
   Tooltip,
   TooltipContent,

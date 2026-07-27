@@ -7,27 +7,40 @@ export async function initiateNuvemshopAuth() {
   const clientId = process.env.NS_APP_ID;
 
   if (!clientId) {
-    throw new Error('A variável de ambiente NS_APP_ID não está configurada.');
+    throw new Error("A variável de ambiente NS_APP_ID não está configurada.");
   }
 
   const authUrl = `https://www.nuvemshop.com.br/apps/${clientId}/authorize`;
 
-  // Em vez de redirect(), nós retornamos a URL para o cliente
   return { success: true, url: authUrl };
 }
 
-export async function disconnectNuvemshopIntegration(userId: string) {
+export async function disconnectNuvemshopIntegration(
+  userId: string,
+  slug: string, // 🔥 Agora indicamos claramente que estamos recebendo o slug
+) {
   try {
-    // 1. Busca a integração para pegar os dados antes de apagar
+    // 🔍 PASSO 1: Traduzir o slug no ID verdadeiro do Workspace
+    const workspace = await prisma.workspace.findUnique({
+      where: { slug: slug },
+    });
+
+    if (!workspace) {
+      return { success: false, error: "Workspace não encontrado." };
+    }
+
+    const realWorkspaceId = workspace.id;
+
+    // 🔍 PASSO 2: Busca a integração para pegar os dados usando o ID Real
     const integration = await prisma.storeIntegration.findFirst({
-      where: { userId, platform: "NUVEMSHOP" },
+      where: { userId, workspaceId: realWorkspaceId, platform: "NUVEMSHOP" },
     });
 
     if (!integration) {
       return { success: false, error: "Integração não encontrada." };
     }
 
-    // 2. Limpeza de Webhooks na API da Nuvemshop (Silenciosa)
+    // 3. Limpeza de Webhooks na API da Nuvemshop (Silenciosa)
     if (integration.storeId && integration.accessToken) {
       try {
         const webhooksRes = await fetch(
@@ -71,12 +84,11 @@ export async function disconnectNuvemshopIntegration(userId: string) {
       }
     }
 
-    // 3. Deleta do banco do Scale Drop (usando deleteMany igual você fez na Shopify)
+    // 4. Deleta do banco do Scale Drop usando o ID Real
     await prisma.storeIntegration.deleteMany({
-      where: { userId, platform: "NUVEMSHOP" },
+      where: { userId, workspaceId: realWorkspaceId, platform: "NUVEMSHOP" },
     });
 
-    // 4. Revalida a página usando a mesma rota que você usa na Shopify
     revalidatePath("/settings/integrations");
 
     return { success: true };

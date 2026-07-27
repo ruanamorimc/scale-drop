@@ -14,20 +14,20 @@ datasource db {
 }
 
 model User {
-  id            String       @id
+  id            String  @id
   name          String
   email         String
-  emailVerified Boolean      @default(false)
+  emailVerified Boolean @default(false)
   phoneNumber   String?
   image         String?
   role          String?
 
   // Status de acesso baseado em assinatura
-  plan          String       @default("FREE")
-  accessStatus  AccessStatus @default(PENDING)
+  plan         PlanType     @default(FREE)
+  accessStatus AccessStatus @default(PENDING)
 
-  createdAt     DateTime     @default(now())
-  updatedAt     DateTime     @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   // Relacionamentos Better Auth
   sessions Session[]
@@ -50,12 +50,15 @@ model User {
   dashboardLayout Json?
 
   // 🔥 NOVO CAMPO PARA AS TABELAS DE UTMS:
-  preferences     Json?     @default("{}")
+  preferences Json? @default("{}")
 
   // 🔥 NOVOS RELACIONAMENTOS PARA MARKETING (META ADS)
-  metaAccessToken String?       // Token OAuth gerado no login com Facebook
+  metaAccessToken String? // Token OAuth gerado no login com Facebook
   metaAccounts    MetaAccount[] // Contas de anúncio ativadas
-  metaPixels      MetaPixel[]   // Pixels configurados via CAPI
+  metaPixels      MetaPixel[] // Pixels configurados via CAPI
+
+  // 🔥 NOVOS RELACIONAMENTOS PARA WORKSPACES
+  workspaces Workspace[]
 
   @@unique([email])
   @@index([accessStatus])
@@ -66,6 +69,29 @@ enum AccessStatus {
   PENDING // Assinatura pendente
   ACTIVE // Assinatura ativa
   BLOCKED // Assinatura expirada/cancelada ou sem assinatura
+}
+
+model Workspace {
+  id     String @id @default(cuid())
+  slug   String @unique
+  name   String
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  // Relacionamentos: Tudo que pertence a este workspace
+  integrations StoreIntegration[]
+  orders       Order[]
+  products     Product[]
+
+  taxes         Tax[]
+  fees          Fee[]
+  fixedExpenses FixedExpense[]
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("workspaces")
 }
 
 model Session {
@@ -121,26 +147,26 @@ model Verification {
 // ============================================
 
 model Subscription {
-  id         String @id @default(cuid())
-  userId     String @unique      // Garante 1 assinatura por usuário
-  user       User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String @unique // Garante 1 assinatura por usuário
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // Dados do checkout externo
-  provider       SubscriptionProvider     // Kirvano, PerfectPay, Hubla, Ticto
-  externalId     String                   // ID da assinatura no sistema externo
-  externalPlanId String?                  // ID do plano no sistema externo
+  provider       SubscriptionProvider // Kirvano, PerfectPay, Hubla, Ticto
+  externalId     String // ID da assinatura no sistema externo
+  externalPlanId String? // ID do plano no sistema externo
 
   // Status da assinatura
-  plan   String                           // Ex: "PRO", "ENTERPRISE"
+  plan   PlanType           @default(FREE) // Ex: "PRO", "ENTERPRISE"
   status SubscriptionStatus @default(PENDING)
 
   // Período da assinatura
   startDate  DateTime
-  endDate    DateTime?           // Se null = vitalício. Se data = renovação.
-  canceledAt DateTime?          // Se preenchido, o usuário pediu cancelamento
+  endDate    DateTime? // Se null = vitalício. Se data = renovação.
+  canceledAt DateTime? // Se preenchido, o usuário pediu cancelamento
 
   // Dados do webhook
-  lastWebhookEvent String?     // Último evento recebido
+  lastWebhookEvent String? // Último evento recebido
   lastWebhookAt    DateTime?
 
   // Metadados - Dados extras que o gateway mandar
@@ -154,6 +180,13 @@ model Subscription {
   @@index([status])
   @@index([endDate])
   @@map("subscription")
+}
+
+enum PlanType {
+  FREE
+  START
+  SCALE
+  PRO
 }
 
 enum SubscriptionProvider {
@@ -176,21 +209,21 @@ enum SubscriptionStatus {
 // ============================================
 
 model SubscriptionHistory {
-  id        String   @id @default(cuid())
-  userId    String
-  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   // O Evento (O que aconteceu?)
-  event     String   // Ex: "CREATED", "RENEWED", "UPGRADED", "CANCELED", "PAYMENT_FAILED"
-  
+  event String // Ex: "CREATED", "RENEWED", "UPGRADED", "CANCELED", "PAYMENT_FAILED"
+
   // Detalhes do momento
-  plan      String   // Qual era o plano nesse momento
-  status    String   // Status resultante (ACTIVE, CANCELED)
+  plan   String // Qual era o plano nesse momento
+  status String // Status resultante (ACTIVE, CANCELED)
 
   // Financeiro (Opcional, mas bom ter)
-  amount    Float?   // Quanto ele pagou
-  currency  String?  @default("BRL")
-  
+  amount   Float? // Quanto ele pagou
+  currency String? @default("BRL")
+
   createdAt DateTime @default(now()) // A data exata que o evento ocorreu
 
   @@index([userId])
@@ -202,9 +235,9 @@ model SubscriptionHistory {
 // ============================================
 
 model Wallet {
-  id      String @id @default(cuid())
-  userId  String @unique
-  user    User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  id     String @id @default(cuid())
+  userId String @unique
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   // Saldo atual (em centavos para precisão)
   balance Decimal @default(0) @db.Decimal(12, 2)
@@ -221,9 +254,9 @@ model Wallet {
 }
 
 model Transaction {
-  id      String @id @default(cuid())
-  userId  String
-  user    User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   // Tipo e valor
   type         TransactionType
@@ -257,9 +290,9 @@ enum TransactionType {
 // ============================================
 
 model Supplier {
-  id      String @id @default(cuid())
-  userId  String
-  user    User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
 
   // Dados básicos
   name     String
@@ -295,45 +328,49 @@ model Supplier {
 // ============================================
 
 model StoreIntegration {
-  id             String @id @default(cuid())
-  userId         String
-  user           User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Restrict)
+
+  workspaceId String
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
 
   // 🔥 MUDAMOS AQUI: Agora ele aceita qualquer provedor da nossa lista VIP
-  platform       IntegrationProvider
+  platform IntegrationProvider
 
   // Dados da integração
-  storeName      String
-  storeId        String?  // Deixei opcional (?), pois Yampi usa Token, não ID de loja
-  storeUrl       String?
+  storeName String
+  storeId   String? // Deixei opcional (?), pois Yampi usa Token, não ID de loja
+  storeUrl  String?
 
   // Credenciais (criptografadas)
-  accessToken    String   // Usaremos este campo para guardar a Chave Secreta
+  accessToken    String // Usaremos este campo para guardar a Chave Secreta
   publicKey      String?
   refreshToken   String?
   tokenExpiresAt DateTime?
 
   // Status da integração
-  isActive       Boolean  @default(true)
-  isConnected    Boolean  @default(false)
-  lastSyncAt     DateTime?
+  isActive    Boolean   @default(false)
+  isConnected Boolean   @default(false)
+  lastSyncAt  DateTime?
 
   // Configurações
-  autoSync       Boolean  @default(true)
-  syncInterval   Int?     // Intervalo em minutos
+  autoSync     Boolean @default(true)
+  syncInterval Int? // Intervalo em minutos
 
   // Metadados
-  metadata       Json?
+  metadata Json?
 
   // Relacionamentos
-  orders         Order[]
+  orders Order[]
 
-  createdAt      DateTime @default(now())
-  updatedAt      DateTime @updatedAt
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  // Removi o storeId da chave única pois checkouts podem não ter "ID de Loja"
-  @@unique([userId, platform]) 
+  // Garante que não repita a mesma loja dentro do mesmo workspace
+  @@unique([workspaceId, platform, storeId])
   @@index([userId])
+  @@index([workspaceId])
   @@index([platform])
   @@index([isActive])
   @@map("store_integration")
@@ -356,6 +393,7 @@ enum IntegrationProvider {
   MERCADO_PAGO
   STRIPE
   PAGARME
+  SHOPIFY_PAYMENTS
 
   // Marketing
   FACEBOOK_ADS
@@ -371,12 +409,12 @@ enum IntegrationProvider {
 // ============================================
 
 model MetaAccount {
-  id        String  @id @default(cuid())
-  userId    String
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
-  
-  accountId String  // ID da BM ou Conta (Ex: act_123456789)
-  name      String  // Nome da Conta (Ex: Loja Principal)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  accountId String // ID da BM ou Conta (Ex: act_123456789)
+  name      String // Nome da Conta (Ex: Loja Principal)
   isActive  Boolean @default(true) // Se o switch estiver ligado no Sheet
 
   createdAt DateTime @default(now())
@@ -388,17 +426,17 @@ model MetaAccount {
 }
 
 model MetaPixel {
-  id        String  @id @default(cuid())
-  userId    String
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  name      String  // Nome da configuração do Pixel (Ex: Pixel de Lançamento)
-  type      String  @default("meta") // Pode virar um Enum no futuro se adicionar TikTok
-  pixelIds  String[] // Array de IDs (Contingência)
-  status    String  @default("Ativo") // "Ativo" ou "Desativado"
+  name     String // Nome da configuração do Pixel (Ex: Pixel de Lançamento)
+  type     String   @default("meta") // Pode virar um Enum no futuro se adicionar TikTok
+  pixelIds String[] // Array de IDs (Contingência)
+  status   String   @default("Ativo") // "Ativo" ou "Desativado"
 
   // 🔥 Aqui é onde salvamos todas as regras dinâmicas que você preenche no formulário lateral
-  rules     Json    @default("{}")
+  rules Json @default("{}")
   // Exemplo de estrutura do JSON que salvaremos:
   // {
   //   "lead": { "enabled": true, "detectionRule": "Contém texto", "text": "Entrar no grupo" },
@@ -427,15 +465,15 @@ model Product {
   supplier   Supplier? @relation(fields: [supplierId], references: [id], onDelete: SetNull)
 
   // --- Identificação Externa (O SEGREDO DO MULTI-LOJAS) 🦎 ---
-  externalId    String?  // ID na loja (ex: "MLB123", "7654321")
-  provider      String   @default("MANUAL") // "MERCADO_LIVRE", "SHOPIFY", "NUVEMSHOP", "MANUAL"
-  storeName     String?  // Nome da loja visual (ex: "Minha Loja ML Principal")
+  externalId String? // ID na loja (ex: "MLB123", "7654321")
+  provider   String  @default("MANUAL") // "MERCADO_LIVRE", "SHOPIFY", "NUVEMSHOP", "MANUAL"
+  storeName  String? // Nome da loja visual (ex: "Minha Loja ML Principal")
 
   // Link direto para o produto na plataforma original
-  externalLink  String?
+  externalLink String?
 
   // Dados básicos
-  name    String  // Título do produto
+  name    String // Título do produto
   sku     String? // SKU do produto
   barcode String? // Código de barras
 
@@ -444,8 +482,8 @@ model Product {
   salePrice Decimal? @db.Decimal(10, 2) // Preço de venda sugerido
 
   // --- Taxas (Novos campos para a Calculadora) ---
-  platformFee   Decimal  @default(0) @db.Decimal(10, 2) // Taxa (ex: 16% do ML)
-  shippingFee   Decimal  @default(0) @db.Decimal(10, 2) // Custo de envio/Frete
+  platformFee Decimal @default(0) @db.Decimal(10, 2) // Taxa (ex: 16% do ML)
+  shippingFee Decimal @default(0) @db.Decimal(10, 2) // Custo de envio/Frete
 
   // Estoque
   stockQuantity Int  @default(0)
@@ -460,7 +498,7 @@ model Product {
   tags     String[]
 
   // Status
-  isActive    Boolean @default(true)  // Mapeamos: active->true, paused->false
+  isActive    Boolean @default(true) // Mapeamos: active->true, paused->false
   isPublished Boolean @default(false) // Se está publicado nas lojas
 
   // Dados do fornecedor
@@ -471,9 +509,13 @@ model Product {
   orderItems OrderItem[]
 
   // --- Metadados ---
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id])
+  workspaceId String?
 
+  // 🔥 A REGRA DE OURO:
+  @@unique([externalId, provider, userId])
   // --- ÍNDICES E CHAVES ÚNICAS ---
   @@index([userId])
   @@index([supplierId])
@@ -481,58 +523,71 @@ model Product {
   @@index([isActive])
   @@index([isPublished])
   @@map("product")
-
-  // 🔥 A REGRA DE OURO:
-  @@unique([externalId, provider, userId])
 }
 
 // ============================================
 // DESPESA FIXA
 // ============================================
 model FixedExpense {
-  id          String   @id @default(cuid())
-  userId      String
-  description String   // Ex: "Shopify", "Funcionário"
-  category    String   // Ex: "Ferramentas", "Equipe", "Infra"
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  description String // Ex: "Shopify", "Funcionário"
+  category    String // Ex: "Ferramentas", "Equipe", "Infra"
   amount      Decimal  @db.Decimal(10, 2)
   date        DateTime // Data de competência
   createdAt   DateTime @default(now())
-  
-  user        User     @relation(fields: [userId], references: [id])
+
+  @@index([workspaceId]) // 🔥 O ÍNDICE NOVO
 }
 
 // ============================================
 // TAXAS
 // ============================================
 model Fee {
-  id              String   @id @default(cuid())
-  userId          String
-  name            String   // Ex: "Taxa Kirvano", "Mercado Pago"
-  type            String   // "FIXED" ou "PERCENTAGE"
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  name            String // Ex: "Taxa Kirvano", "Mercado Pago"
+  type            String // "FIXED" ou "PERCENTAGE"
   value           Decimal  @db.Decimal(10, 2)
   calculationRule String? // "faturamento" ou "venda" (Pode ser nulo se for taxa fixa)
   paymentMethod   String[] // ["PIX", "BOLETO", "CARD_1X", etc]
   isDefault       Boolean  @default(true)
   createdAt       DateTime @default(now())
-  
-  user            User     @relation(fields: [userId], references: [id])
+
+  @@index([workspaceId])
 }
 
 // ============================================
 // IMPOSTOS
 // ============================================
 model Tax {
-  id              String   @id @default(cuid())
-  userId          String
-  name            String   // Ex:"Simples Nacional","Imposto do Anúncio (Meta)" 
+  id     String @id @default(cuid())
+  userId String
+  user   User   @relation(fields: [userId], references: [id])
+
+  // 🔥 AS DUAS LINHAS FALTANTES:
+  workspaceId String?
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  name            String // Ex: "Simples Nacional", "Imposto do Anúncio (Meta)"
   rate            Decimal  @db.Decimal(10, 2) // Porcentagem
   type            String?  @default("GOVERNMENT")
   calculationRule String?  @default("faturamento") // "faturamento" ou "comissao"
-  isSystem        Boolean  @default(false)         // Se for true, não mostra lixeira
+  isSystem        Boolean  @default(false) // Se for true, não mostra lixeira
   isActive        Boolean  @default(true)
-  createdAt       DateTime @default(now()) // Importante ter data de criação
-  
-  user      User   @relation(fields: [userId], references: [id])
+  createdAt       DateTime @default(now())
+
+  @@index([workspaceId]) // 🔥 O ÍNDICE NOVO
 }
 
 // ============================================
@@ -573,7 +628,7 @@ model Order {
   total        Decimal @db.Decimal(10, 2)
 
   // Taxa retida pelo gateway e Custo do Meta ADS
-  gatewayFee   Decimal? @default(0) @db.Decimal(10, 2)
+  gatewayFee    Decimal? @default(0) @db.Decimal(10, 2)
   marketingCost Decimal? @default(0) @db.Decimal(10, 2)
 
   // Informações de pagamento
@@ -598,8 +653,10 @@ model Order {
   // Metadados
   metadata Json? // Dados adicionais da loja
 
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
+  createdAt   DateTime   @default(now())
+  updatedAt   DateTime   @updatedAt
+  workspace   Workspace? @relation(fields: [workspaceId], references: [id])
+  workspaceId String?
 
   @@unique([storeIntegrationId, externalOrderId])
   @@index([userId])
@@ -660,15 +717,15 @@ model OrderItem {
 // EVENTOS DE RASTREIO (TIMELINE)
 // ==========================================
 model TrackingEvent {
-  id          String   @id @default(cuid())
-  orderId     String
-  order       Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  
-  status      String   // Ex: "Em Trânsito", "Na Fronteira"
-  description String   // Ex: "Objeto recebido pelos Correios do Brasil"
+  id      String @id @default(cuid())
+  orderId String
+  order   Order  @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  status      String // Ex: "Em Trânsito", "Na Fronteira"
+  description String // Ex: "Objeto recebido pelos Correios do Brasil"
   date        DateTime // Data que o evento ocorreu lá na transportadora
-  
-  createdAt   DateTime @default(now())
+
+  createdAt DateTime @default(now())
 
   @@index([orderId])
   @@map("tracking_events")

@@ -36,7 +36,7 @@ import {
   Printer,
   Trash2,
 } from "lucide-react";
-import { Order } from "@/app/(private)/orders/columns";
+import { Order } from "@/app/(private)/[workspaceId]/orders/columns";
 import { StatusBadge } from "@/components/data-table/StatusBadge";
 import { PaymentStatusBadge } from "@/components/data-table/PaymentStatusBadge";
 import { PremiumCard } from "@/components/cards/PremiumCard";

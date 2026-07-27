@@ -1,16 +1,19 @@
 "use server";
 
-import prisma from "@/lib/prisma";
-import { Order } from "@/app/(private)/orders/columns";
+import prisma from "@/lib/prisma"
+import { Order } from "@/app/(private)/[slug]/orders/columns";
 
-// 🔥 1. Adicionamos o parâmetro productId (opcional)
 export async function getRecentOrders(
+  workspaceId: string,
   from?: Date,
   to?: Date,
   productId?: string,
 ): Promise<Order[]> {
   try {
-    const taxesConfig = await prisma.tax.findMany();
+    // 🔥 1. ISOLAMENTO DAS TAXAS: Busca apenas as taxas desta loja específica
+    const taxesConfig = await prisma.tax.findMany({
+      where: { workspaceId: workspaceId },
+    });
 
     const revenueTaxConfig = taxesConfig.find(
       (t) => t.calculationRule === "Sobre Faturamento",
@@ -24,9 +27,10 @@ export async function getRecentOrders(
     );
     const metaTaxRate = metaTaxConfig ? Number(metaTaxConfig.rate) / 100 : 0;
 
-    // 🔥 2. Instruímos o Prisma a filtrar pelo produto caso exista!
+    // 🔥 2. ISOLAMENTO DOS PEDIDOS: Filtra os pedidos pelo workspaceId
     const orders = await prisma.order.findMany({
       where: {
+        workspaceId: workspaceId, // <-- O isolamento principal entra aqui!
         ...(from || to
           ? {
               createdAt: {

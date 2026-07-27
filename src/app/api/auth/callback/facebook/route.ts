@@ -1,26 +1,67 @@
 import { NextResponse } from "next/server";
-import prisma from "@/lib/prisma"; // ⚠️ Ajuste o caminho do prisma se o seu for diferente!
+import { headers } from "next/headers";
+import { auth } from "@/lib/auth"; // Seu setup do BetterAuth
+import prisma from "@/lib/prisma";
 
 export async function GET(request: Request) {
+  // 1. Verificar se o usuário está logado de forma segura no servidor
+  const session = await auth.api.getSession({
+    headers: await headers(),
+  });
+
+  if (!session?.user) {
+    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  }
+
+  const userId = session.user.id;
+
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const error = searchParams.get("error");
 
-  // 🔥 Pegamos de volta o userId que enviamos no passo anterior
-  const userId = searchParams.get("state");
+  // 🔥 Pegamos o SLUG que enviamos através do parâmetro "state"
+  const slug = searchParams.get("state");
 
-  const appUrl = process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000";
-  const returnUrl = `${appUrl}/settings/integrations`;
+  // Garante que usa a URL do Ngrok (ou produção)
+  const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
+
+  // 🔥 Monta a URL de retorno com o SLUG dinâmico
+  const returnUrl = slug
+    ? `${baseUrl}/${slug}/settings/integrations`
+    : `${baseUrl}/start`;
 
   // Se o usuário recusou ou faltou algum dado
-  if (error || !code || !userId) {
-    return NextResponse.redirect(new URL(`${returnUrl}?error=access_denied`));
+  if (error || !code || !slug) {
+    const errorHtmlResponse = `
+      <!DOCTYPE html>
+      <html>
+        <head><title>Acesso Negado</title></head>
+        <body style="background-color: #09090b; color: #ef4444; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif;">
+          <h2>Acesso negado ou dados ausentes.</h2>
+          <script>
+            setTimeout(() => {
+              if (window.opener) {
+                window.opener.postMessage({ type: 'META_OAUTH_ERROR' }, '*');
+                window.close();
+              } else {
+                window.location.href = "${returnUrl}?error=access_denied";
+              }
+            }, 2000);
+          </script>
+        </body>
+      </html>
+    `;
+    return new NextResponse(errorHtmlResponse, {
+      headers: { "Content-Type": "text/html" },
+    });
   }
 
   try {
     const clientId = process.env.NEXT_PUBLIC_META_APP_ID;
     const clientSecret = process.env.META_APP_SECRET;
-    const redirectUri = `${appUrl}/api/auth/callback/facebook`;
+
+    // A redirectUri precisa ser idêntica à que foi chamada no frontend
+    const redirectUri = `${baseUrl}/api/auth/callback/facebook`;
 
     // ==========================================
     // 1. TROCAR O CÓDIGO PELO TOKEN DE ACESSO
@@ -34,12 +75,11 @@ export async function GET(request: Request) {
       throw new Error(tokenData.error.message);
     }
 
-    let accessToken = tokenData.access_token;
+    const accessToken = tokenData.access_token;
 
     // ==========================================
     // 2. BUSCAR AS CONTAS DE ANÚNCIO DELE
     // ==========================================
-    // Vamos bater na API da Meta para pegar as "AdAccounts" atreladas a esse perfil
     const accountsUrl = `https://graph.facebook.com/v19.0/me/adaccounts?fields=name,account_id,account_status&access_token=${accessToken}`;
     const accountsRes = await fetch(accountsUrl);
     const accountsData = await accountsRes.json();
@@ -49,14 +89,11 @@ export async function GET(request: Request) {
     // ==========================================
     // 3. SALVAR TUDO NO BANCO DE DADOS (PRISMA)
     // ==========================================
-
-    // Atualiza o Token do usuário
     await prisma.user.update({
       where: { id: userId },
       data: { metaAccessToken: accessToken },
     });
 
-    // Salva as contas de anúncio usando Upsert (Atualiza se existir, cria se não existir)
     for (const acc of adAccounts) {
       await prisma.metaAccount.upsert({
         where: {
@@ -69,21 +106,81 @@ export async function GET(request: Request) {
           userId: userId,
           accountId: acc.account_id,
           name: acc.name || `Conta ${acc.account_id}`,
-          isActive: true,
+          isActive: false,
         },
       });
     }
 
     console.log(`✅ [META ADS] Conectado! ${adAccounts.length} contas salvas.`);
 
-    // 🔥 Redireciona de volta para a tela de configurações com sucesso!
-    return NextResponse.redirect(
-      new URL(`${returnUrl}?success=meta_connected`),
-    );
+    // ==========================================
+    // 🔥 4. O PULO DO GATO: FECHAR O POPUP VIA HTML
+    // ==========================================
+    const htmlResponse = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Autenticando Meta Ads...</title>
+          <style>
+            body { background-color: #09090b; color: white; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif; }
+            .loader { border: 4px solid #333; border-top: 4px solid #3b82f6; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin-bottom: 16px; }
+            @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+            .container { text-align: center; }
+          </style>
+        </head>
+        <body>
+          <div class="container">
+            <div class="loader"></div>
+            <h2>Autenticação concluída!</h2>
+            <p>Fechando janela e retornando ao painel...</p>
+          </div>
+          <script>
+            setTimeout(() => {
+              if (window.opener) {
+                // Manda a mensagem para o IntegrationList fechar o load e atualizar a tela
+                window.opener.postMessage({ type: 'META_OAUTH_SUCCESS' }, '*');
+                window.close();
+              } else {
+                // Fallback caso abra na mesma guia
+                window.location.href = "${returnUrl}?success=meta_connected";
+              }
+            }, 800);
+          </script>
+        </body>
+      </html>
+    `;
+
+    return new NextResponse(htmlResponse, {
+      headers: { "Content-Type": "text/html" },
+    });
   } catch (error) {
     console.error("Erro interno no OAuth do Facebook:", error);
-    return NextResponse.redirect(
-      new URL(`${returnUrl}?error=internal_server_error`),
-    );
+
+    // ==========================================
+    // 🔥 5. TRATAMENTO DE ERROS (FECHA O POPUP TAMBÉM)
+    // ==========================================
+    const errorHtmlResponse = `
+      <!DOCTYPE html>
+      <html>
+        <head><title>Erro na Autenticação</title></head>
+        <body style="background-color: #09090b; color: #ef4444; display: flex; justify-content: center; align-items: center; height: 100vh; font-family: sans-serif;">
+          <h2>Ocorreu um erro na conexão com o Meta.</h2>
+          <script>
+            setTimeout(() => {
+              if (window.opener) {
+                window.opener.postMessage({ type: 'META_OAUTH_ERROR' }, '*');
+                window.close();
+              } else {
+                window.location.href = "${returnUrl}?error=internal_server_error";
+              }
+            }, 2000);
+          </script>
+        </body>
+      </html>
+    `;
+
+    return new NextResponse(errorHtmlResponse, {
+      headers: { "Content-Type": "text/html" },
+    });
   }
 }

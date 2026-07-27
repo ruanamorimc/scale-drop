@@ -8,14 +8,15 @@ import {
   endOfDay,
   subDays,
   differenceInDays,
-  getHours,
   addDays,
   addMonths,
   startOfMonth,
   format,
 } from "date-fns";
 
+// 🔥 1. Adicionamos o workspaceId como primeiro parâmetro obrigatório
 export async function getFinanceMetrics(
+  workspaceId: string,
   from?: Date,
   to?: Date,
   productId?: string,
@@ -32,9 +33,16 @@ export async function getFinanceMetrics(
   const prevStartDate = subDays(prevEndDate, daysDiff);
 
   try {
+    // 🔥 2. Repassamos o workspaceId para as duas consultas
     const [currentData, prevData] = await Promise.all([
-      fetchPeriodData(userId, startDate, endDate, productId),
-      fetchPeriodData(userId, prevStartDate, prevEndDate, productId),
+      fetchPeriodData(userId, workspaceId, startDate, endDate, productId),
+      fetchPeriodData(
+        userId,
+        workspaceId,
+        prevStartDate,
+        prevEndDate,
+        productId,
+      ),
     ]);
 
     const calcTrend = (curr: number, prev: number) => {
@@ -69,29 +77,37 @@ export async function getFinanceMetrics(
   }
 }
 
+// 🔥 3. A função auxiliar agora recebe e usa o workspaceId
 async function fetchPeriodData(
   userId: string,
+  workspaceId: string,
   start: Date,
   end: Date,
   productId?: string,
 ) {
+  // 🔥 4. Injetamos o workspaceId no 'where' de todas as tabelas relacionadas à loja
   const [orders, fees, taxes, fixedExpenses, integrations, userData] =
     await Promise.all([
       prisma.order.findMany({
         where: {
           userId,
+          workspaceId,
           createdAt: { gte: startOfDay(start), lte: endOfDay(end) },
           ...(productId ? { items: { some: { productId } } } : {}),
         },
         include: { items: true },
       }),
-      prisma.fee.findMany({ where: { userId } }),
-      prisma.tax.findMany({ where: { userId } }),
+      prisma.fee.findMany({ where: { userId, workspaceId } }),
+      prisma.tax.findMany({ where: { userId, workspaceId } }),
       prisma.fixedExpense.findMany({
-        where: { userId, date: { gte: startOfDay(start), lte: endOfDay(end) } },
+        where: {
+          userId,
+          workspaceId,
+          date: { gte: startOfDay(start), lte: endOfDay(end) },
+        },
         orderBy: { date: "desc" },
       }),
-      prisma.storeIntegration.findMany({ where: { userId } }),
+      prisma.storeIntegration.findMany({ where: { userId, workspaceId } }),
       prisma.user.findUnique({
         where: { id: userId },
         select: { metaAccessToken: true },
@@ -470,27 +486,24 @@ async function fetchPeriodData(
       const orderDate = new Date(order.createdAt);
       const hour = orderDate.getHours();
 
-      // 1. Array de 24h
       if (chartData[hour]) {
         chartData[hour].revenue += orderTotal;
-        chartData[hour].productcost += orderCost; // Corrigido C minúsculo
+        chartData[hour].productcost += orderCost;
         chartData[hour].tax += orderTax;
         chartData[hour].profit += currentProfit;
       }
 
-      // 2. Array da Timeline
       const dateKey = isMonthly
         ? format(orderDate, "yyyy-MM")
         : format(orderDate, "yyyy-MM-dd");
       if (timelineMap.has(dateKey)) {
         const dayData = timelineMap.get(dateKey);
         dayData.revenue += orderTotal;
-        dayData.productcost += orderCost; // Corrigido C minúsculo
+        dayData.productcost += orderCost;
         dayData.tax += orderTax;
         dayData.profit += currentProfit;
       }
 
-      // 🔥 3. Array do Turno
       let turno = "Madrugada";
       if (hour >= 6 && hour < 12) turno = "Manhã";
       else if (hour >= 12 && hour < 18) turno = "Tarde";
@@ -498,20 +511,17 @@ async function fetchPeriodData(
 
       const tData = turnoMap.get(turno)!;
       tData.revenue += orderTotal;
-      tData.productcost += orderCost; // Corrigido C minúsculo
+      tData.productcost += orderCost;
       tData.tax += orderTax;
       tData.profit += currentProfit;
 
-      // 🔥 4. Array da Semana
       const dayNames = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
       const wData = weekMap.get(dayNames[orderDate.getDay()])!;
       wData.revenue += orderTotal;
-      wData.productcost += orderCost; // Corrigido C minúsculo
+      wData.productcost += orderCost;
       wData.tax += orderTax;
       wData.profit += currentProfit;
 
-      // 🔥 5. Array de Região (Mapeando a UF)
-      // Fim do erro de 'any': Ensinamos o TypeScript a esperar essas propriedades de forma segura
       const safeOrder = order as unknown as {
         customerState?: string | null;
         state?: string | null;
@@ -539,7 +549,7 @@ async function fetchPeriodData(
       const rData = regionMap.get(region);
       if (rData) {
         rData.revenue += orderTotal;
-        rData.productcost += orderCost; // Corrigido C minúsculo
+        rData.productcost += orderCost;
         rData.tax += orderTax;
         rData.profit += currentProfit;
       }
