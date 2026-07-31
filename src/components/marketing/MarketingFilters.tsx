@@ -200,7 +200,7 @@ export function MarketingFilters({
             size="sm"
             onClick={handleUpdateClick}
             disabled={isUpdating} // Desabilita o botão enquanto carrega
-            className="group/btn relative overflow-hidden px-5 w-40 py-4 rounded-sm border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 shadow-lg hover:shadow-2xl hover:shadow-blue-500/40 hover:scale-105 active:scale-95 transition-all duration-300 ease-out hover:border-blue-400 flex items-center justify-center disabled:opacity-80 disabled:pointer-events-none disabled:scale-100"
+            className="group/btn relative overflow-hidden px-5 w-40 py-4 rounded-sm border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 shadow-lg hover:shadow-2xl hover:shadow-blue-500/40 hover:scale-105 active:scale-95 transition-all duration-300 ease-out hover:border-blue-400 flex items-center justify-center disabled:opacity-80 disabled:pointer-events-none disabled:scale-100 cursor-pointer"
           >
             {/* 🔥 O Feixe de Luz Perfeito (só anima na ida) */}
             <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover/btn:translate-x-full transition-transform duration-0 group-hover/btn:duration-[1200ms] ease-out" />

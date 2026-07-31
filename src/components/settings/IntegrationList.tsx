@@ -38,16 +38,24 @@ import { disconnectAppmaxIntegration } from "@/actions/appmax-actions";
 import { disconnectPagarmeIntegration } from "@/actions/pagarme-actions";
 import { disconnectNuvemshopIntegration } from "@/actions/nuvemshop-actions";
 
+// 🔥 Adicionados getMetaAccounts e getGoogleAccounts para sincronização silenciosa
+import { disconnectMetaAds, getMetaAccounts } from "@/actions/meta-actions";
+import {
+  disconnectGoogleAds,
+  getGoogleAccounts,
+} from "@/actions/google-actions";
+
 // Sheets & Modais
-import { MetaAdsSheet } from "./MetaAdsSheet";
-import { YampiSheet } from "./YampiSheet";
-import { CartpandaSheet } from "./CartpandaSheet";
-import { ShopifySheet } from "./ShopifySheet";
-import { ShopifyPaymentsSheet } from "./ShopifyPaymentsSheet";
+import { MetaAdsSheet } from "@/components/settings/MetaAdsSheet";
+import { GoogleAdsSheet } from "@/components/settings/GoogleAdsSheet";
+import { YampiSheet } from "@/components/settings/YampiSheet";
+import { CartpandaSheet } from "@/components/settings/CartpandaSheet";
+import { ShopifySheet } from "@/components/settings/ShopifySheet";
+import { ShopifyPaymentsSheet } from "@/components/settings/ShopifyPaymentsSheet";
 import { AppmaxSheet } from "@/components/settings/AppmaxSheet";
 import { PagarmeSheet } from "@/components/settings/PagarmeSheet";
 import { NuvemshopSheet } from "@/components/settings/NuvemshopSheet";
-import { MercadoLivreSheet } from "./MercadoLivreSheet";
+import { MercadoLivreSheet } from "@/components/settings/MercadoLivreSheet";
 
 // ==========================================
 // INTERFACES & CONSTANTES
@@ -63,7 +71,8 @@ interface IntegrationsListProps {
   mlStores?: StoreData[];
   userId: string;
   userPlan?: string;
-  isMetaConnected?: boolean; // 🔥 ADICIONADO AQUI: Recebe a verdade do Backend!
+  isMetaConnected?: boolean;
+  isGoogleConnected?: boolean;
   isYampiConnected?: boolean;
   yampiUrl?: string | null;
   isCartpandaConnected?: boolean;
@@ -94,7 +103,8 @@ export function IntegrationsList({
   mlStores = [],
   userId,
   userPlan = "START",
-  isMetaConnected = false, // 🔥 Recebe a prop
+  isMetaConnected = false,
+  isGoogleConnected = false,
   isYampiConnected = false,
   yampiUrl = null,
   isCartpandaConnected = false,
@@ -119,16 +129,15 @@ export function IntegrationsList({
   // ==========================================
   const [activeTab, setActiveTab] = useState("all");
 
-  // 🔥 AGORA É REAL: O estado inicial vem direto do seu banco de dados
+  // Estados de Conexão Frontend
   const [isFbConnected, setIsFbConnected] = useState(isMetaConnected);
+  const [isGoogleConnectedState, setIsGoogleConnectedState] =
+    useState(isGoogleConnected);
 
-  // Garante que o estado atualize se a propriedade do banco mudar via servidor
-  useEffect(() => {
-    setIsFbConnected(isMetaConnected);
-  }, [isMetaConnected]);
-
+  // Controle de Abertura dos Sheets
   const [isMlModalOpen, setIsMlModalOpen] = useState(false);
   const [isFbModalOpen, setIsFbModalOpen] = useState(false);
+  const [isGoogleModalOpen, setIsGoogleModalOpen] = useState(false);
   const [isYampiModalOpen, setIsYampiModalOpen] = useState(false);
   const [isCartpandaModalOpen, setIsCartpandaModalOpen] = useState(false);
   const [isShopifyModalOpen, setIsShopifyModalOpen] = useState(false);
@@ -137,6 +146,17 @@ export function IntegrationsList({
   const [isAppmaxModalOpen, setIsAppmaxModalOpen] = useState(false);
   const [isPagarmeModalOpen, setIsPagarmeModalOpen] = useState(false);
   const [isNuvemshopModalOpen, setIsNuvemshopModalOpen] = useState(false);
+
+  // ==========================================
+  // SINCRONIZAÇÃO INICIAL E ERRO DO REACT CORRIGIDO
+  // ==========================================
+  useEffect(() => {
+    setIsFbConnected(isMetaConnected);
+  }, [isMetaConnected]);
+
+  useEffect(() => {
+    setIsGoogleConnectedState(isGoogleConnected);
+  }, [isGoogleConnected]);
 
   // ==========================================
   // LÓGICA DE BLOQUEIO DE PLANO (PAYWALL)
@@ -159,6 +179,7 @@ export function IntegrationsList({
     isPagarmeConnected,
     isNuvemshopConnected,
     isFbConnected,
+    isGoogleConnectedState,
   ].filter(Boolean).length;
 
   const isLimitReached = activeIntegrationsCount >= maxIntegrations;
@@ -178,23 +199,34 @@ export function IntegrationsList({
   };
 
   // ==========================================
-  // HANDLERS E FUNÇÕES DE DESCONEXÃO
+  // HANDLERS DE DESCONEXÃO (AÇÕES DIRETAS)
   // ==========================================
   const handleDisconnectML = async () => {
     const res = await disconnectMercadoLivre(slug);
     if (res.success) {
       toast.success("Mercado Livre desconectado com sucesso.");
       setIsMlModalOpen(false);
-    } else {
-      toast.error(res.error || "Erro ao desconectar Mercado Livre.");
-    }
+    } else toast.error(res.error || "Erro ao desconectar Mercado Livre.");
   };
 
-  const handleDisconnectMeta = () => {
-    // 🔥 Removemos o localStorage falso daqui
-    setIsFbConnected(false);
-    // TODO: Adicionar Server Action para remover o token no banco de dados futuramente
-    toast.error("Conta do Meta desconectada.");
+  const handleDisconnectMeta = async () => {
+    const res = await disconnectMetaAds(userId);
+    if (res.success) {
+      setIsFbConnected(false);
+      setIsFbModalOpen(false);
+      toast.success("Meta Ads desconectado com sucesso.");
+      router.refresh();
+    } else toast.error("Erro ao desconectar a conta do Meta.");
+  };
+
+  const handleDisconnectGoogle = async () => {
+    const res = await disconnectGoogleAds(userId);
+    if (res.success) {
+      setIsGoogleConnectedState(false);
+      setIsGoogleModalOpen(false);
+      toast.success("Google Ads desconectado com sucesso.");
+      router.refresh();
+    } else toast.error("Erro ao desconectar Google Ads.");
   };
 
   const handleDisconnectYampi = async () => {
@@ -226,9 +258,7 @@ export function IntegrationsList({
     if (res.success) {
       toast.info("Shopify Payments desconectado com sucesso.");
       setIsShopifyPaymentsModalOpen(false);
-    } else {
-      toast.error("Erro ao desconectar Shopify Payments.");
-    }
+    } else toast.error("Erro ao desconectar Shopify Payments.");
   };
 
   const handleDisconnectAppmax = async () => {
@@ -236,9 +266,7 @@ export function IntegrationsList({
     if (res.success) {
       toast.info("Appmax desconectada com sucesso.");
       setIsAppmaxModalOpen(false);
-    } else {
-      toast.error("Erro ao desconectar Appmax.");
-    }
+    } else toast.error("Erro ao desconectar Appmax.");
   };
 
   const handleDisconnectPagarme = async () => {
@@ -246,9 +274,7 @@ export function IntegrationsList({
     if (res.success) {
       toast.info("Pagar.me desconectada com sucesso.");
       setIsPagarmeModalOpen(false);
-    } else {
-      toast.error("Erro ao desconectar Pagar.me.");
-    }
+    } else toast.error("Erro ao desconectar Pagar.me.");
   };
 
   const handleDisconnectNuvemshop = async () => {
@@ -256,30 +282,93 @@ export function IntegrationsList({
     if (res?.success) {
       toast.info("Nuvemshop desconectada com sucesso.");
       setIsNuvemshopModalOpen(false);
-    } else {
-      toast.error(res?.error || "Erro ao desconectar Nuvemshop.");
-    }
+    } else toast.error(res?.error || "Erro ao desconectar Nuvemshop.");
   };
 
   // ==========================================
-  // EFEITOS
+  // OUVINTES GLOBAIS DE OAUTH (A MÁGICA DA REATIVIDADE)
   // ==========================================
   useEffect(() => {
+    let mounted = true;
+
+    // 1. Escuta Mensagens de Popups
+    const handleMessage = (event: MessageEvent) => {
+      if (event.data?.type === "NUVEMSHOP_OAUTH_SUCCESS") {
+        toast.success("Nuvemshop conectada com sucesso!");
+        router.refresh();
+      }
+      if (event.data?.type === "META_OAUTH_SUCCESS") {
+        setIsFbConnected(true);
+        router.refresh();
+      }
+      if (event.data?.type === "GOOGLE_OAUTH_SUCCESS") {
+        setIsGoogleConnectedState(true);
+        router.refresh();
+      }
+      if (event.data?.type === "GOOGLE_OAUTH_DISCONNECT") {
+        setIsGoogleConnectedState(false);
+        router.refresh();
+      }
+    };
+
+    window.addEventListener("message", handleMessage);
+
+    // 2. Escuta Parâmetros de URL (Redirect Direto)
     if (typeof window !== "undefined") {
       const urlParams = new URLSearchParams(window.location.search);
+
       if (urlParams.get("success") === "meta_connected") {
         setTimeout(() => {
           setIsFbConnected(true);
-          // 🔥 Removemos a gravação no localStorage falso
           toast.success("Meta Ads conectado com sucesso!");
           window.history.replaceState(null, "", window.location.pathname);
         }, 0);
       }
+
+      if (urlParams.get("success") === "google_connected") {
+        setTimeout(() => {
+          setIsGoogleConnectedState(true);
+          toast.success("Google Ads conectado com sucesso!");
+          window.history.replaceState(null, "", window.location.pathname);
+        }, 0);
+      }
     }
-  }, []);
+
+    // 🔥 3. SINCRONIZAÇÃO SILENCIOSA (Garante a precisão dos Cards instantaneamente)
+    const syncStatus = async () => {
+      try {
+        const [googleRes, metaRes] = await Promise.all([
+          getGoogleAccounts(userId),
+          getMetaAccounts(userId),
+        ]);
+
+        if (mounted) {
+          if (
+            googleRes.success &&
+            googleRes.data &&
+            googleRes.data.length > 0
+          ) {
+            setIsGoogleConnectedState(true);
+          }
+          if (metaRes.success && metaRes.data && metaRes.data.length > 0) {
+            setIsFbConnected(true);
+          }
+        }
+      } catch (error) {
+        console.error("Erro ao sincronizar status das integrações", error);
+      }
+    };
+
+    syncStatus();
+
+    return () => {
+      mounted = false;
+      window.removeEventListener("message", handleMessage);
+    };
+  }, [userId, router]);
 
   // ==========================================
-  // LISTA COMPLETA DE INTEGRAÇÕES
+  // ARRAY CENTRAL DE APLICATIVOS (CARDS)
   // ==========================================
   const integrations = [
     {
@@ -323,7 +412,7 @@ export function IntegrationsList({
       logoUrl: "/logos/meta.png",
       description:
         "Sincronize o pixel e API de conversões para otimizar suas campanhas.",
-      isConnected: isFbConnected, // 🔥 Agora usa o estado conectado com o backend
+      isConnected: isFbConnected,
       category: "marketing",
       logoClass: "scale-[1.4]",
       isComingSoon: false,
@@ -334,10 +423,10 @@ export function IntegrationsList({
       url: "ads.google.com",
       logoUrl: "/logos/google-ads.svg",
       description:
-        "Sincronize o pixel e API de conversões para otimizar suas campanhas de pesquisa.",
-      isConnected: false,
+        "Sincronize tags e API de conversões para otimizar suas campanhas de pesquisa.",
+      isConnected: isGoogleConnectedState,
       category: "marketing",
-      isComingSoon: true,
+      isComingSoon: false,
     },
     {
       id: "tiktok",
@@ -390,7 +479,7 @@ export function IntegrationsList({
       url: "stripe.com",
       logoUrl: "/logos/stripe.svg",
       description:
-        "Solução de pagamentos completa do Mercado Livre para sua loja online.",
+        "Gateway internacional robusto para processar pagamentos globais.",
       isConnected: false,
       category: "gateway",
       isComingSoon: true,
@@ -482,11 +571,12 @@ export function IntegrationsList({
   );
 
   // ==========================================
-  // RENDER DO COMPONENTE
+  // INTERFACE
   // ==========================================
   return (
     <>
       <div className="space-y-8 lg:w-[140%] transition-all duration-300">
+        {/* FILTROS E CONTADOR */}
         <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 pb-2 border-b border-border/50">
           <div className="flex flex-wrap items-center gap-2">
             {CATEGORIES.map((tab) => {
@@ -545,6 +635,7 @@ export function IntegrationsList({
           </div>
         </div>
 
+        {/* GRID DE CARDS */}
         <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
           {filteredList.map((app) => (
             <PremiumCard
@@ -560,6 +651,7 @@ export function IntegrationsList({
                       {app.name}
                       {app.isConnected &&
                         (app.id === "meta" ||
+                          app.id === "google" ||
                           app.id === "yampi" ||
                           app.id === "cartpanda" ||
                           app.id === "shopify" ||
@@ -608,6 +700,8 @@ export function IntegrationsList({
                   </p>
                 </div>
               </div>
+
+              {/* BOTÕES DE AÇÃO DOS CARDS */}
               <div className="p-4 border-t border-border/50 bg-muted/30 rounded-b-xl transition-colors">
                 {app.id === "ml" ? (
                   app.isConnected ? (
@@ -618,7 +712,6 @@ export function IntegrationsList({
                       >
                         <Settings2 size={14} /> Gerenciar Lojas
                       </Button>
-
                       <Button
                         onClick={handleDisconnectML}
                         variant="outline"
@@ -666,6 +759,37 @@ export function IntegrationsList({
                     >
                       <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out"></div>
                       <Settings2 size={14} /> Conectar Meta
+                    </Button>
+                  )
+                ) : app.id === "google" ? (
+                  app.isConnected ? (
+                    <div className="flex items-center gap-2 w-full animate-in fade-in duration-300">
+                      <Button
+                        onClick={() => setIsGoogleModalOpen(true)}
+                        className="flex-1 bg-zinc-800 hover:bg-zinc-700 text-white gap-2 h-10 text-xs shadow-sm cursor-pointer"
+                      >
+                        <Settings2 size={14} /> Configurar Ativos
+                      </Button>
+                      <Button
+                        onClick={handleDisconnectGoogle}
+                        variant="outline"
+                        size="icon"
+                        className="h-10 w-10 border-red-500/20 text-red-500 hover:bg-red-500/10 shrink-0 transition-colors cursor-pointer"
+                      >
+                        <Unplug size={14} />
+                      </Button>
+                    </div>
+                  ) : (
+                    <Button
+                      onClick={() =>
+                        handleConnectionAttempt(() =>
+                          setIsGoogleModalOpen(true),
+                        )
+                      }
+                      className="group relative overflow-hidden w-full h-10 gap-2 justify-center font-medium text-xs rounded-lg shadow-sm border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 hover:scale-100 active:scale-95 transition-all duration-300 ease-out hover:border-blue-400 text-white cursor-pointer"
+                    >
+                      <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover:translate-x-full transition-transform duration-700 ease-out"></div>
+                      <Settings2 size={14} /> Conectar Google Ads
                     </Button>
                   )
                 ) : app.id === "yampi" ? (
@@ -887,7 +1011,7 @@ export function IntegrationsList({
                   <Button
                     onClick={() =>
                       !app.isComingSoon &&
-                      alert(`Integração com ${app.name} em breve!`)
+                      toast.info(`Integração com ${app.name} em breve!`)
                     }
                     disabled={app.isComingSoon}
                     variant="default"
@@ -916,7 +1040,9 @@ export function IntegrationsList({
         </div>
       </div>
 
-      {/* MODAIS AQUI EMBAIXO */}
+      {/* ========================================== */}
+      {/* RENDER DOS MODAIS / SHEETS LATERAIS */}
+      {/* ========================================== */}
       <MercadoLivreSheet
         open={isMlModalOpen}
         onOpenChange={setIsMlModalOpen}
@@ -927,7 +1053,11 @@ export function IntegrationsList({
         onOpenChange={setIsFbModalOpen}
         userId={userId}
       />
-
+      <GoogleAdsSheet
+        open={isGoogleModalOpen}
+        onOpenChange={setIsGoogleModalOpen}
+        userId={userId}
+      />
       <YampiSheet
         open={isYampiModalOpen}
         onOpenChange={setIsYampiModalOpen}

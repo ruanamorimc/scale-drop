@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useMemo, useEffect } from "react";
+import { useParams } from "next/navigation";
 import { authClient } from "@/lib/auth-client";
 import {
   ArrowUpFromLine,
@@ -10,6 +11,8 @@ import {
   RefreshCw,
   Search,
   Filter,
+  Check,
+  ChevronDown,
 } from "lucide-react";
 import { DatePickerWithRange } from "@/components/date-range-picker";
 import { Input } from "@/components/ui/input";
@@ -20,14 +23,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Button } from "@/components/ui/button";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipProvider,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
-import { subDays, isWithinInterval, startOfDay, endOfDay } from "date-fns";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
+import { subDays } from "date-fns";
 import { DateRange } from "react-day-picker";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
@@ -35,14 +37,15 @@ import { toast } from "sonner";
 import { ReportingTable } from "@/components/data-table/ReportingTable";
 import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 import { ColumnCustomizer } from "@/components/marketing/ColumnCustomizer";
-
-// 🔥 Adicionamos o PremiumCard para manter o visual padronizado
 import { PremiumCard } from "@/components/cards/PremiumCard";
 
 import { getColumns } from "./columns";
 import { UtmRow } from "./types";
 
-// --- Ícones ---
+import { exportToCsv } from "@/lib/export-utils";
+import { getUtmReport, UtmGroupBy } from "@/actions/utm-actions";
+import { useWorkspaceFilters } from "@/hooks/useWorkspaceFilters";
+
 const GoogleIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" className={className}>
     <path
@@ -64,82 +67,6 @@ const GoogleIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-// --- DADOS MOCKADOS ROBUSTOS ---
-const generateUtmData = (count: number): UtmRow[] => {
-  return Array.from({ length: count }).map((_, i) => ({
-    id: `utm-${i}`,
-    utm_source: Math.random() > 0.5 ? "facebook" : "google",
-    utm_medium: "cpc",
-    utm_campaign: `[Search] Campanha Institucional - ${i + 1}`,
-    utm_content: `content_${i}`,
-    utm_term: `term_${i}`,
-    created_at: subDays(new Date(), Math.floor(Math.random() * 30)),
-    product_name: Math.random() > 0.5 ? "produto_a" : "produto_b",
-    account_name: Math.random() > 0.5 ? "conta_1" : "conta_2",
-
-    // Financeiro
-    budget: 100 + i,
-    spent: Math.random() * 1000,
-    revenue: Math.random() * 5000,
-    profit: Math.random() * 2000,
-    gross_revenue: Math.random() * 5500,
-    pending_revenue: Math.random() * 500,
-    refund_revenue: Math.random() * 50,
-    product_costs: Math.random() * 200,
-    taxes: Math.random() * 50,
-
-    // Indicadores
-    roas: 2 + Math.random(),
-    margin: 30 + Math.random() * 10,
-    roi: 1.5 + Math.random(),
-    arpu: 15 + Math.random(),
-
-    // Custos
-    cpa: Math.random() * 50,
-    cpc: Math.random() * 2,
-    cpm: 15 + Math.random(),
-    cpp: 10,
-    cpt: 12,
-    cpl: 5,
-    cpi: 8,
-    cpv: 0.5,
-    cps: 1.2,
-    cost_per_convo: 3.5,
-
-    // Vendas/Conversão
-    sales: Math.floor(Math.random() * 100),
-    sales_pending: 2,
-    sales_total: 102,
-    sales_refunded: 1,
-    ic: 50,
-    icr: 25,
-    atc: 80,
-    conversations: 10,
-    leads: 5,
-    conversion_rate: 2.5,
-
-    // Tráfego
-    clicks: Math.floor(Math.random() * 500),
-    ctr: 1.5,
-    impressions: 10000,
-    frequency: 1.2,
-    page_views: 600,
-    con_rate: 60,
-
-    // Vídeo
-    video_retention: 30,
-    hook_rate: 45,
-    hold_rate: 10,
-    followers: 100,
-
-    // Outros
-    ad_account: "Conta Principal",
-    creation_date: "2024-03-01",
-    delivery_status: "Ativo",
-  })) as any;
-};
-
-// COLUNAS PADRÃO
 const DEFAULT_COLUMNS = [
   "sales",
   "cpa",
@@ -153,46 +80,127 @@ const DEFAULT_COLUMNS = [
   "cpc",
 ];
 
+interface ActionReportItem {
+  name: string;
+  sales: number;
+  revenue: number;
+  sales_pending: number;
+  pending_revenue: number;
+  sales_refunded: number;
+  refund_revenue: number;
+  sales_total: number;
+  gross_revenue: number;
+  spent: number;
+  clicks: number;
+  impressions: number;
+  atc: number;
+  ic: number;
+  page_views: number;
+  leads: number;
+  conversations: number;
+  profit: number;
+  total_spent: number;
+  roas: number;
+  roi: number;
+  margin: number;
+  arpu: number;
+  cpa: number;
+  cpc: number;
+  cpm: number;
+  cpp: number;
+  cpt: number;
+  cpl: number;
+  cpi: number;
+  cost_per_convo: number;
+  cpv: number;
+  cps: number;
+  icr: number;
+  conversion_rate: number;
+  ctr: number;
+  frequency: number;
+  con_rate: number;
+  taxes: number;
+  product_costs: number;
+  video_retention: number;
+  hook_rate: number;
+  hold_rate: number;
+  followers: number;
+  budget: number;
+  bid_cap: number;
+  status: string;
+  cycle: string;
+  card: string;
+  ids: string;
+  last_updated: string;
+  ad_account: string;
+  creation_date: string;
+  delivery_status: string;
+}
+
+type ColumnDefHelper = { accessorKey?: string; id?: string };
+
 export default function UtmsReportPage() {
+  const params = useParams();
+  const slug = params.slug as string;
+  const { data: session } = authClient.useSession();
+
   const [date, setDate] = useState<DateRange | undefined>({
     from: subDays(new Date(), 30),
     to: new Date(),
   });
+
   const [isHeaderVisible, setIsHeaderVisible] = useState(true);
   const [data, setData] = useState<UtmRow[]>([]);
-
-  const [groupBy, setGroupBy] = useState("utm_campaign");
-  const [platforms, setPlatforms] = useState<string[]>(["meta", "google"]);
-
-  // Estado das colunas (Carregado do LocalStorage)
-  const [columnOrder, setColumnOrder] = useState<string[]>(DEFAULT_COLUMNS);
-
-  const [searchQuery, setSearchQuery] = useState("");
-  const [selectedProduct, setSelectedProduct] = useState("qualquer");
-  const [selectedAccount, setSelectedAccount] = useState("qualquer");
+  const [isLoading, setIsLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
-  const { data: session } = authClient.useSession();
 
-  useEffect(() => {
-    setData(generateUtmData(100));
-  }, []);
+  const [groupBy, setGroupBy] = useState<UtmGroupBy>("utm_campaign");
 
-  // Persistência com LocalStorage
-  useEffect(() => {
+  // 🔥 ESTADO DOS BOTÕES DE PLATAFORMA
+  const [platforms, setPlatforms] = useState<("meta" | "google")[]>([
+    "meta",
+    "google",
+  ]);
+
+  const [columnOrder, setColumnOrder] = useState<string[]>(() => {
     if (typeof window !== "undefined") {
       const savedColumns = localStorage.getItem("utms_table_columns");
       if (savedColumns) {
         try {
           const parsed = JSON.parse(savedColumns);
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            setColumnOrder(parsed);
-          }
+          if (Array.isArray(parsed) && parsed.length > 0) return parsed;
         } catch (e) {
-          console.error("Erro ao carregar colunas salvas", e);
+          console.error("Erro ao carregar colunas", e);
         }
       }
     }
-  }, []);
+    return DEFAULT_COLUMNS;
+  });
+
+  const [searchQuery, setSearchQuery] = useState("");
+
+  const [contaFilter, setContaFilter] = useState<string[]>(["all"]);
+  const [produtoFilter, setProdutoFilter] = useState<string[]>(["all"]);
+  const [productSearch, setProductSearch] = useState("");
+
+  const [isEditing, setIsEditing] = useState(false);
+  const [showValues, setShowValues] = useState(true);
+
+  const { accounts, products } = useWorkspaceFilters();
+
+  const handleToggleFilter = (
+    id: string,
+    currentSelection: string[],
+    setSelection: (val: string[]) => void,
+  ) => {
+    if (id === "all") return setSelection(["all"]);
+    let newSelection = currentSelection.filter((c) => c !== "all");
+    if (newSelection.includes(id))
+      newSelection = newSelection.filter((c) => c !== id);
+    else newSelection.push(id);
+    if (newSelection.length === 0) newSelection = ["all"];
+    setSelection(newSelection);
+  };
 
   const handleSaveColumns = (newOrder: string[]) => {
     setColumnOrder(newOrder);
@@ -202,7 +210,8 @@ export default function UtmsReportPage() {
     }
   };
 
-  const togglePlatform = (platform: string) => {
+  // 🔥 LÓGICA DE TOGGLE DOS BOTÕES
+  const togglePlatform = (platform: "meta" | "google") => {
     setPlatforms((prev) =>
       prev.includes(platform)
         ? prev.filter((p) => p !== platform)
@@ -210,51 +219,136 @@ export default function UtmsReportPage() {
     );
   };
 
+  // 🔥 ACTION AGORA RECEBE E ENVIA OS BOTÕES DE PLATAFORMA (activePlatforms)
+  const fetchUtmData = async (
+    currentSlug: string,
+    currentGroupBy: UtmGroupBy,
+    fromDate: Date,
+    toDate?: Date,
+    prodIds?: string[],
+    accIds?: string[],
+    activePlatforms?: ("meta" | "google")[],
+  ) => {
+    setIsLoading(true);
+
+    const res = await getUtmReport(
+      currentSlug,
+      currentGroupBy,
+      fromDate,
+      toDate || new Date(),
+      prodIds,
+      accIds,
+      activePlatforms,
+    );
+
+    if (res.success && res.data) {
+      const rawData = res.data as unknown as ActionReportItem[];
+
+      const mappedData = rawData.map((item, index) => ({
+        id: `row-${index}`,
+        [currentGroupBy]: item.name,
+        ...item,
+      }));
+
+      setData(mappedData as unknown as UtmRow[]);
+    } else {
+      toast.error("Erro ao carregar os dados de UTMs.");
+    }
+
+    setIsLoading(false);
+    setIsRefreshing(false);
+  };
+
+  // 🔥 O useEffect AGORA ESCUTA O ESTADO `platforms`!
+  // Se clicar no botão Meta/Google, ele recarrega a tabela respeitando a trava da Action.
+  useEffect(() => {
+    if (slug && date?.from) {
+      fetchUtmData(
+        slug,
+        groupBy,
+        date.from,
+        date.to,
+        produtoFilter,
+        contaFilter,
+        platforms,
+      );
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    slug,
+    groupBy,
+    date?.from,
+    date?.to,
+    produtoFilter,
+    contaFilter,
+    platforms,
+  ]);
+
+  const handleRefresh = () => {
+    if (slug && date?.from) {
+      setIsRefreshing(true);
+      fetchUtmData(
+        slug,
+        groupBy,
+        date.from,
+        date.to,
+        produtoFilter,
+        contaFilter,
+        platforms,
+      );
+      toast.info("Atualizando métricas...");
+    }
+  };
+
+  const filteredProducts = products.filter((p) =>
+    p.name.toLowerCase().includes(productSearch.toLowerCase()),
+  );
+
+  // Filtro visual rápido (Fallback)
   const filteredData = useMemo(() => {
     return data.filter((row) => {
-      const rowPlatform = row.utm_source === "facebook" ? "meta" : "google";
-      if (!platforms.includes(rowPlatform)) return false;
-      if (searchQuery) {
-        const valueToSearch = String((row as any)[groupBy] || "").toLowerCase();
-        if (!valueToSearch.includes(searchQuery.toLowerCase())) return false;
-      }
-      if (date?.from && date?.to && (row as any).created_at) {
-        const rowDate = (row as any).created_at;
-        if (
-          !isWithinInterval(rowDate, {
-            start: startOfDay(date.from),
-            end: endOfDay(date.to),
-          })
-        )
-          return false;
-      }
+      const rowName = String(row[groupBy as keyof UtmRow] || "").toLowerCase();
+      if (searchQuery && !rowName.includes(searchQuery.toLowerCase()))
+        return false;
+
+      const isMeta =
+        rowName.includes("fb") ||
+        rowName.includes("ig") ||
+        rowName.includes("meta") ||
+        rowName.includes("facebook") ||
+        rowName.includes("instagram");
+      const isGoogle =
+        rowName.includes("google") ||
+        rowName.includes("ads") ||
+        rowName.includes("search") ||
+        rowName.includes("youtube") ||
+        rowName.includes("yt") ||
+        rowName.includes("gdn");
+
+      if (isMeta && !platforms.includes("meta")) return false;
+      if (isGoogle && !platforms.includes("google")) return false;
+
       return true;
     });
-  }, [data, platforms, searchQuery, date, groupBy]);
+  }, [data, platforms, searchQuery, groupBy]);
 
   const activeColumns = useMemo(() => {
     const allColumnDefs = getColumns(groupBy);
     const mainColumn = allColumnDefs[0];
     const metricColumns = allColumnDefs.slice(1).filter((col) => {
-      return columnOrder.includes((col as any).accessorKey);
+      const colDef = col as ColumnDefHelper;
+      const colKey = colDef.accessorKey || colDef.id;
+      return colKey && columnOrder.includes(colKey);
     });
     const sortedMetrics = metricColumns.sort((a, b) => {
-      return (
-        columnOrder.indexOf((a as any).accessorKey) -
-        columnOrder.indexOf((b as any).accessorKey)
-      );
+      const aDef = a as ColumnDefHelper;
+      const bDef = b as ColumnDefHelper;
+      const aKey = aDef.accessorKey || aDef.id || "";
+      const bKey = bDef.accessorKey || bDef.id || "";
+      return columnOrder.indexOf(aKey) - columnOrder.indexOf(bKey);
     });
     return [mainColumn, ...sortedMetrics];
   }, [groupBy, columnOrder]);
-
-  const handleRefresh = () => {
-    setIsRefreshing(true);
-    setTimeout(() => {
-      setData(generateUtmData(100));
-      setIsRefreshing(false);
-      toast.success("Atualizado!");
-    }, 1000);
-  };
 
   const handleExport = () => {
     if (!filteredData || filteredData.length === 0) {
@@ -264,42 +358,15 @@ export default function UtmsReportPage() {
 
     toast.info("Gerando arquivo CSV...");
 
-    // 1. Extrai cabeçalhos (chaves dos dados)
-    const headers = Object.keys(filteredData[0]).join(",");
+    // Pega as colunas ativas na tela (O agrupamento atual + as métricas do seletor)
+    const activeKeys = [groupBy, ...columnOrder];
 
-    // 2. Mapeia as linhas de dados
-    const rows = filteredData.map((row) =>
-      Object.values(row)
-        .map((value) => {
-          if (value === null || value === undefined) return "";
-          if (typeof value === "string" && value.includes(",")) {
-            return `"${value}"`;
-          }
-          return value;
-        })
-        .join(","),
-    );
+    // Chama a nossa nova função isolada
+    const success = exportToCsv(filteredData, activeKeys, "relatorio_utms");
 
-    // 3. Monta o conteúdo final do CSV
-    const csvContent = [headers, ...rows].join("\n");
-
-    // 4. Cria o Blob e o Link de Download
-    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.setAttribute(
-      "download",
-      `relatorio_utms_${new Date().toISOString().split("T")[0]}.csv`,
-    );
-    document.body.appendChild(link);
-
-    // 5. Clica no link e limpa
-    link.click();
-    document.body.removeChild(link);
-    URL.revokeObjectURL(url);
-
-    toast.success("Download iniciado!");
+    if (success) {
+      toast.success("Download concluído!");
+    }
   };
 
   const currentUser = {
@@ -309,19 +376,23 @@ export default function UtmsReportPage() {
   };
 
   return (
-    <div className="flex flex-col h-screen w-full bg-background overflow-hidden relative">
+    <div className="flex flex-col h-screen w-full overflow-hidden relative">
       {isHeaderVisible && (
         <div className="sticky top-0 shrink-0 w-full px-6 pt-6 pb-4 border-b border-border/30 transition-all backdrop-blur-md shadow-sm z-30">
           <MarketingHeader
             user={currentUser}
             hideControls={true}
-            currentRevenue={0}
+            isEditing={isEditing}
+            setIsEditing={setIsEditing}
+            showValues={showValues}
+            setShowValues={setShowValues}
+            onSave={() => {}}
+            onReset={() => {}}
           />
         </div>
       )}
 
       <div className="flex-1 p-6 min-h-0 w-full flex flex-col transition-all duration-300">
-        {/* 🔥 FIX APLICADO: PremiumCard com overflow-visible para soltar a rolagem */}
         <PremiumCard
           className="w-full flex-1 p-0 flex flex-col overflow-hidden relative z-0"
           contentClassName="overflow-visible flex flex-col h-full"
@@ -335,12 +406,13 @@ export default function UtmsReportPage() {
                 <ColumnCustomizer
                   currentColumns={columnOrder}
                   onSave={handleSaveColumns}
+                  variant="utms"
                 />
                 <div className="w-px h-4 bg-border/60 mx-1" />
                 <button
                   onClick={() => togglePlatform("meta")}
                   className={cn(
-                    "h-7 w-7 flex items-center justify-center rounded-md transition-all",
+                    "h-7 w-7 flex items-center justify-center rounded-md transition-all cursor-pointer",
                     platforms.includes("meta")
                       ? "bg-blue-500/10 text-blue-500"
                       : "text-muted-foreground opacity-50 grayscale",
@@ -355,7 +427,7 @@ export default function UtmsReportPage() {
                 <button
                   onClick={() => togglePlatform("google")}
                   className={cn(
-                    "h-7 w-7 flex items-center justify-center rounded-md transition-all",
+                    "h-7 w-7 flex items-center justify-center rounded-md transition-all cursor-pointer",
                     platforms.includes("google")
                       ? "bg-background shadow-sm text-foreground"
                       : "opacity-50 grayscale text-muted-foreground",
@@ -366,7 +438,7 @@ export default function UtmsReportPage() {
                 <div className="w-px h-4 bg-border/60 mx-1" />
                 <button
                   onClick={() => setIsHeaderVisible(!isHeaderVisible)}
-                  className="h-7 w-7 flex items-center justify-center text-muted-foreground hover:text-foreground"
+                  className="h-7 w-7 flex items-center justify-center text-muted-foreground hover:text-foreground cursor-pointer"
                 >
                   {isHeaderVisible ? (
                     <ArrowUpFromLine size={16} />
@@ -380,34 +452,36 @@ export default function UtmsReportPage() {
               <Button
                 variant="outline"
                 size="sm"
-                className="h-9 gap-2 bg-transparent hover:bg-muted"
+                className="h-9 gap-2 bg-transparent hover:bg-muted cursor-pointer"
                 onClick={handleExport}
               >
                 <Download size={14} /> Exportar
               </Button>
               <Button
                 size="sm"
-                className="h-9 gap-2 bg-blue-600 hover:bg-blue-700 text-white"
+                className="group/btn relative overflow-hidden px-5 w-36 h-8 rounded-md border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 text-white shadow-lg hover:shadow-2xl hover:shadow-blue-500/40 hover:scale-105 active:scale-95 transition-all duration-300 flex items-center justify-center disabled:opacity-80 cursor-pointer"
                 onClick={handleRefresh}
-                disabled={isRefreshing}
+                disabled={isRefreshing || isLoading}
               >
-                <RefreshCw
-                  size={14}
-                  className={cn(isRefreshing && "animate-spin")}
-                />{" "}
-                {isRefreshing ? "..." : "Atualizar"}
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover/btn:translate-x-full transition-transform duration-0 group-hover/btn:duration-[1200ms] ease-out" />
+                {(isRefreshing || isLoading) && (
+                  <RefreshCw size={14} className="animate-spin mr-2" />
+                )}
+                {isRefreshing || isLoading ? "Atualizando..." : "Atualizar"}
               </Button>
             </div>
           </div>
 
-          <div className="shrink-0 p-4 grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4 border-b border-border/60 bg-transparent relative z-10">
-            {/* 1. Agrupar Por */}
-            <div className="flex flex-col gap-1.5 w-full">
+          <div className="shrink-0 p-4 grid grid-cols-1 md:grid-cols-5 gap-4 border-b border-border/60 bg-transparent relative z-10">
+            <div className="flex flex-col gap-1.5 md:col-span-1">
               <label className="text-[10px] font-semibold text-muted-foreground/80 uppercase">
                 Agrupar por
               </label>
-              <Select value={groupBy} onValueChange={setGroupBy}>
-                <SelectTrigger className="h-9 w-full bg-background border-border">
+              <Select
+                value={groupBy}
+                onValueChange={(v) => setGroupBy(v as UtmGroupBy)}
+              >
+                <SelectTrigger className="h-9 w-full bg-background border-border cursor-pointer">
                   <SelectValue />
                 </SelectTrigger>
                 <SelectContent>
@@ -430,48 +504,193 @@ export default function UtmsReportPage() {
               </Select>
             </div>
 
-            {/* 2. Produto */}
-            <div className="flex flex-col gap-1.5 w-full">
+            {/* POPOVER DE PRODUTO IDENTICO AO META */}
+            <div className="flex flex-col gap-1.5 md:col-span-1">
               <label className="text-[10px] font-semibold text-muted-foreground/80 uppercase">
                 Produto
               </label>
-              <Select
-                value={selectedProduct}
-                onValueChange={setSelectedProduct}
-              >
-                <SelectTrigger className="h-9 w-full bg-background border-border">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="qualquer">Qualquer</SelectItem>
-                  <SelectItem value="produto_a">Produto A</SelectItem>
-                  <SelectItem value="produto_b">Produto B</SelectItem>
-                </SelectContent>
-              </Select>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="h-9 w-full justify-between border-border bg-background/50 text-foreground font-normal px-3 cursor-pointer"
+                  >
+                    <span className="truncate text-sm">
+                      {produtoFilter.includes("all")
+                        ? "Qualquer"
+                        : `${produtoFilter.length} selecionado(s)`}
+                    </span>
+                    <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[280px] p-2 border-border bg-background shadow-xl rounded-xl">
+                  <div className="flex flex-col gap-1">
+                    <div className="relative mb-2">
+                      <Search className="absolute left-2.5 top-2 h-4 w-4 text-muted-foreground" />
+                      <Input
+                        value={productSearch}
+                        onChange={(e) => setProductSearch(e.target.value)}
+                        placeholder="Pesquisar..."
+                        className="h-8 pl-8 bg-muted/50 border-border text-xs"
+                      />
+                    </div>
+                    <div className="max-h-[200px] overflow-y-auto flex flex-col gap-1">
+                      {productSearch === "" && (
+                        <div
+                          onClick={() =>
+                            handleToggleFilter(
+                              "all",
+                              produtoFilter,
+                              setProdutoFilter,
+                            )
+                          }
+                          className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted cursor-pointer transition-colors"
+                        >
+                          <div
+                            className={cn(
+                              "h-4 w-4 rounded-[4px] border flex items-center justify-center transition-colors",
+                              produtoFilter.includes("all")
+                                ? "bg-blue-600 border-blue-600"
+                                : "border-muted-foreground/30",
+                            )}
+                          >
+                            {produtoFilter.includes("all") && (
+                              <Check size={12} className="text-white" />
+                            )}
+                          </div>
+                          <span className="text-sm font-medium text-foreground">
+                            Selecionar todos
+                          </span>
+                        </div>
+                      )}
+                      {filteredProducts.map((prod) => (
+                        <div
+                          key={prod.id}
+                          onClick={() =>
+                            handleToggleFilter(
+                              prod.id,
+                              produtoFilter,
+                              setProdutoFilter,
+                            )
+                          }
+                          className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted cursor-pointer transition-colors"
+                        >
+                          <div
+                            className={cn(
+                              "h-4 w-4 rounded-[4px] border flex items-center justify-center transition-colors",
+                              produtoFilter.includes(prod.id)
+                                ? "bg-blue-600 border-blue-600"
+                                : "border-muted-foreground/30",
+                            )}
+                          >
+                            {produtoFilter.includes(prod.id) && (
+                              <Check size={12} className="text-white" />
+                            )}
+                          </div>
+                          <span className="text-sm font-medium text-foreground truncate">
+                            {prod.name}
+                          </span>
+                        </div>
+                      ))}
+                      {filteredProducts.length === 0 && (
+                        <span className="text-xs text-muted-foreground p-2 text-center">
+                          Nenhum produto cadastrado.
+                        </span>
+                      )}
+                    </div>
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
 
-            {/* 3. Conta */}
-            <div className="flex flex-col gap-1.5 w-full">
+            {/* POPOVER DE CONTA IDENTICO AO META */}
+            <div className="flex flex-col gap-1.5 md:col-span-1">
               <label className="text-[10px] font-semibold text-muted-foreground/80 uppercase">
                 Conta
               </label>
-              <Select
-                value={selectedAccount}
-                onValueChange={setSelectedAccount}
-              >
-                <SelectTrigger className="h-9 w-full bg-background border-border">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="qualquer">Qualquer</SelectItem>
-                  <SelectItem value="conta_1">Conta 01</SelectItem>
-                  <SelectItem value="conta_2">Conta 02</SelectItem>
-                </SelectContent>
-              </Select>
+              <Popover>
+                <PopoverTrigger asChild>
+                  <Button
+                    variant="outline"
+                    className="h-9 w-full justify-between border-border bg-background/50 text-foreground font-normal px-3 cursor-pointer"
+                  >
+                    <span className="truncate text-sm">
+                      {contaFilter.includes("all")
+                        ? "Qualquer"
+                        : `${contaFilter.length} selecionada(s)`}
+                    </span>
+                    <ChevronDown className="h-4 w-4 opacity-50 shrink-0" />
+                  </Button>
+                </PopoverTrigger>
+                <PopoverContent className="w-[240px] p-2 border-border bg-background shadow-xl rounded-xl">
+                  <div className="flex flex-col gap-1 max-h-[250px] overflow-y-auto">
+                    <div
+                      onClick={() =>
+                        handleToggleFilter("all", contaFilter, setContaFilter)
+                      }
+                      className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted cursor-pointer transition-colors"
+                    >
+                      <div
+                        className={cn(
+                          "h-4 w-4 rounded-[4px] border flex items-center justify-center transition-colors",
+                          contaFilter.includes("all")
+                            ? "bg-blue-600 border-blue-600"
+                            : "border-muted-foreground/30",
+                        )}
+                      >
+                        {contaFilter.includes("all") && (
+                          <Check size={12} className="text-white" />
+                        )}
+                      </div>
+                      <span className="text-sm font-medium text-foreground">
+                        Selecionar todas
+                      </span>
+                    </div>
+
+                    {accounts.length > 0 && (
+                      <div className="h-px bg-border/50 my-1 w-full" />
+                    )}
+
+                    {accounts.map((acc) => (
+                      <div
+                        key={acc.id}
+                        onClick={() =>
+                          handleToggleFilter(
+                            acc.id,
+                            contaFilter,
+                            setContaFilter,
+                          )
+                        }
+                        className="flex items-center gap-2 p-2 rounded-lg hover:bg-muted cursor-pointer transition-colors"
+                      >
+                        <div
+                          className={cn(
+                            "h-4 w-4 rounded-[4px] border flex items-center justify-center transition-colors",
+                            contaFilter.includes(acc.id)
+                              ? "bg-blue-600 border-blue-600"
+                              : "border-muted-foreground/30",
+                          )}
+                        >
+                          {contaFilter.includes(acc.id) && (
+                            <Check size={12} className="text-white" />
+                          )}
+                        </div>
+                        <span className="text-sm font-medium text-foreground truncate">
+                          {acc.name}
+                        </span>
+                      </div>
+                    ))}
+                    {accounts.length === 0 && (
+                      <span className="text-xs text-muted-foreground text-center p-3">
+                        Nenhuma conta encontrada.
+                      </span>
+                    )}
+                  </div>
+                </PopoverContent>
+              </Popover>
             </div>
 
-            {/* 4. Período */}
-            <div className="flex flex-col gap-1.5 w-full">
+            <div className="flex flex-col gap-1.5 md:col-span-1">
               <label className="text-[10px] font-semibold text-muted-foreground/80 uppercase">
                 Período
               </label>
@@ -482,15 +701,14 @@ export default function UtmsReportPage() {
               />
             </div>
 
-            {/* 5. Pesquisar */}
-            <div className="flex flex-col gap-1.5 w-full">
+            <div className="flex flex-col gap-1.5 md:col-span-1">
               <label className="text-[10px] font-semibold text-muted-foreground/80 uppercase">
                 Pesquisar
               </label>
               <div className="flex gap-2 relative w-full">
                 <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground/50" />
                 <Input
-                  placeholder="Filtrar por nome..."
+                  placeholder="Filtrar..."
                   className="h-9 pl-9 w-full bg-background border-border"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
@@ -498,7 +716,7 @@ export default function UtmsReportPage() {
                 <Button
                   variant="outline"
                   size="icon"
-                  className="h-9 w-9 shrink-0 bg-background border-border"
+                  className="h-9 w-9 shrink-0 bg-background border-border cursor-pointer"
                 >
                   <Filter size={14} />
                 </Button>
@@ -506,18 +724,15 @@ export default function UtmsReportPage() {
             </div>
           </div>
 
-          {/* 🔥 FIX APLICADO: Div encapsuladora responsável exclusivamente pelo Scroll */}
           <div className="flex-1 w-full relative bg-background rounded-b-xl overflow-hidden flex flex-col z-0">
             <ReportingTable
-              columns={activeColumns as any}
+              columns={activeColumns as ReturnType<typeof getColumns>}
               data={filteredData}
               pageSize={100}
               enableResizing={true}
               hidePagination={true}
               classNames={{
-                // 🔥 O container cresce livremente
                 container: "rounded-none border-0 shadow-none h-full flex-1",
-                // A linha do Header permanece travada no topo
                 headerRow:
                   "bg-card sticky top-0 z-20 text-[10px] text-muted-foreground/80 uppercase shadow-sm",
               }}

@@ -18,7 +18,6 @@ const toNumber = (value: number) =>
 
 // --- DEFINIÇÃO DAS COLUNAS ---
 export const getColumns = (groupBy: string): ColumnDef<UtmRow>[] => {
-  // Nome dinâmico da primeira coluna
   const firstColTitle =
     {
       utm_campaign: "Campanha",
@@ -48,38 +47,7 @@ export const getColumns = (groupBy: string): ColumnDef<UtmRow>[] => {
       enableHiding: false,
     },
 
-    // --- BLOCO 1: GERAIS / STATUS ---
-    {
-      accessorKey: "budget",
-      header: "Orçamento",
-      cell: ({ row }) => (
-        <div className="text-center">{toBRL(row.getValue("budget"))}</div>
-      ),
-      size: 100,
-    },
-    {
-      accessorKey: "bid_cap",
-      header: "Bid Cap",
-      cell: ({ row }) => (
-        <div className="text-center">{toBRL(row.getValue("bid_cap"))}</div>
-      ),
-      size: 90,
-    },
-    { accessorKey: "status", header: "Status da Conta", size: 100 },
-    { accessorKey: "cycle", header: "Ciclo", size: 80 },
-    { accessorKey: "card", header: "Cartão", size: 80 },
-    { accessorKey: "ids", header: "[ID] - IDs", size: 120 },
-    { accessorKey: "last_updated", header: "Última Atualização", size: 120 },
-    {
-      accessorKey: "taxes",
-      header: "Impostos Meta Ads",
-      cell: ({ row }) => (
-        <div className="text-center">{toBRL(row.getValue("taxes"))}</div>
-      ),
-      size: 110,
-    },
-
-    // --- BLOCO 2: FINANCEIRO (DEFAULT) ---
+    // --- BLOCO 1: FINANCEIRO ---
     {
       accessorKey: "spent",
       header: "Valor Gasto",
@@ -90,7 +58,6 @@ export const getColumns = (groupBy: string): ColumnDef<UtmRow>[] => {
       ),
       size: 110,
     },
-    // Se "Total Gasto" for diferente de Valor Gasto, adicione lógica aqui. Assumindo igual para o mock.
     {
       accessorKey: "total_spent",
       header: "Total Gasto",
@@ -141,16 +108,13 @@ export const getColumns = (groupBy: string): ColumnDef<UtmRow>[] => {
       ),
       size: 120,
     },
-
     {
       accessorKey: "profit",
       header: "Lucro",
       cell: ({ row }) => {
         const val = row.getValue<number>("profit");
         return (
-          <div
-            className={`text-center font-bold ${val >= 0 ? "text-emerald-500" : "text-red-500"}`}
-          >
+          <div className={`text-center font-bold ${val >= 0 ? "text-emerald-500" : "text-red-500"}`}>
             {toBRL(val)}
           </div>
         );
@@ -158,7 +122,7 @@ export const getColumns = (groupBy: string): ColumnDef<UtmRow>[] => {
       size: 110,
     },
 
-    // --- BLOCO 3: INDICADORES (ROAS, ROI, MARGEM) ---
+    // --- BLOCO 2: INDICADORES (ROAS, ROI, MARGEM) ---
     {
       accessorKey: "roas",
       header: "ROAS",
@@ -200,276 +164,177 @@ export const getColumns = (groupBy: string): ColumnDef<UtmRow>[] => {
       size: 110,
     },
 
-    // --- BLOCO 4: CUSTOS (CPA, CPC, CPM, ETC) ---
+    // --- BLOCO 3: CUSTOS (CPA, CPC, CPM, ETC) ---
     {
       accessorKey: "cpa",
       header: "CPA (Custo por Ação)",
-      cell: ({ row }) => (
-        <div className="text-center">{toBRL(row.getValue("cpa"))}</div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toBRL(row.getValue("cpa"))}</div>,
       size: 110,
     },
     {
       accessorKey: "cpc",
       header: "CPC (Custo por Clique)",
-      cell: ({ row }) => (
-        <div className="text-center">{toBRL(row.getValue("cpc"))}</div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toBRL(row.getValue("cpc"))}</div>,
       size: 110,
     },
     {
       accessorKey: "cpm",
       header: "CPM (Custo por Mil)",
-      cell: ({ row }) => (
-        <div className="text-center">{toBRL(row.getValue("cpm"))}</div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toBRL(row.getValue("cpm"))}</div>,
       size: 110,
     },
     {
       accessorKey: "cpp",
       header: "[CPP] Custo Vendas Pend.",
-      cell: ({ row }) => (
-        <div className="text-center">{toBRL(row.getValue("cpp"))}</div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toBRL(row.getValue("cpp"))}</div>,
       size: 110,
     },
     {
       accessorKey: "cpt",
       header: "[CPT] Custo Vendas Totais",
-      cell: ({ row }) => (
-        <div className="text-center">{toBRL(row.getValue("cpt"))}</div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toBRL(row.getValue("cpt"))}</div>,
       size: 110,
     },
     {
       accessorKey: "cpl",
       header: "[CPL] Custo por Cadastro",
-      cell: ({ row }) => (
-        <div className="text-center">{toBRL(row.getValue("cpl"))}</div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toBRL(row.getValue("cpl"))}</div>,
       size: 110,
     },
     {
       accessorKey: "cpi",
       header: "[CPI] Custo Checkout",
-      cell: ({ row }) => (
-        <div className="text-center">{toBRL(row.getValue("cpi"))}</div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toBRL(row.getValue("cpi"))}</div>,
       size: 110,
     },
     {
       accessorKey: "cost_per_convo",
       header: "Custo / Conversa",
-      cell: ({ row }) => (
-        <div className="text-center">
-          {toBRL(row.getValue("cost_per_convo"))}
-        </div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toBRL(row.getValue("cost_per_convo"))}</div>,
       size: 110,
     },
     {
       accessorKey: "cpv",
       header: "[CPV] Custo Vis. Pág.",
-      cell: ({ row }) => (
-        <div className="text-center">{toBRL(row.getValue("cpv"))}</div>
-      ),
-      size: 110,
-    },
-    {
-      accessorKey: "cps",
-      header: "[CPS] Custo por Seguidor",
-      cell: ({ row }) => (
-        <div className="text-center">{toBRL(row.getValue("cps"))}</div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toBRL(row.getValue("cpv"))}</div>,
       size: 110,
     },
 
-    // --- BLOCO 5: VENDAS E CONVERSÕES ---
+    // --- BLOCO 4: VENDAS E CONVERSÕES ---
     {
       accessorKey: "sales",
       header: "Vendas (Compras)",
-      cell: ({ row }) => (
-        <div className="text-center">{toNumber(row.getValue("sales"))}</div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toNumber(row.getValue("sales"))}</div>,
       size: 90,
     },
     {
       accessorKey: "sales_pending",
       header: "Vendas Pendentes",
-      cell: ({ row }) => (
-        <div className="text-center">
-          {toNumber(row.getValue("sales_pending"))}
-        </div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toNumber(row.getValue("sales_pending"))}</div>,
       size: 90,
     },
     {
       accessorKey: "sales_total",
       header: "Vendas Totais",
-      cell: ({ row }) => (
-        <div className="text-center">
-          {toNumber(row.getValue("sales_total"))}
-        </div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toNumber(row.getValue("sales_total"))}</div>,
       size: 90,
     },
     {
       accessorKey: "sales_refunded",
       header: "[Vendas Reemb.]",
-      cell: ({ row }) => (
-        <div className="text-center">
-          {toNumber(row.getValue("sales_refunded"))}
-        </div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toNumber(row.getValue("sales_refunded"))}</div>,
       size: 90,
     },
-
     {
       accessorKey: "ic",
       header: "[IC] Checkout Iniciado",
-      cell: ({ row }) => (
-        <div className="text-center">{toNumber(row.getValue("ic"))}</div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toNumber(row.getValue("ic"))}</div>,
       size: 90,
     },
     {
       accessorKey: "icr",
       header: "[ICR] Taxa de ICs (%)",
-      cell: ({ row }) => (
-        <div className="text-center">{toPercent(row.getValue("icr"))}</div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toPercent(row.getValue("icr"))}</div>,
       size: 90,
     },
     {
       accessorKey: "atc",
       header: "Add to Cart (ATC)",
-      cell: ({ row }) => (
-        <div className="text-center">{toNumber(row.getValue("atc"))}</div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toNumber(row.getValue("atc"))}</div>,
       size: 90,
     },
     {
       accessorKey: "conversations",
       header: "[Conversas] Iniciadas",
-      cell: ({ row }) => (
-        <div className="text-center">
-          {toNumber(row.getValue("conversations"))}
-        </div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toNumber(row.getValue("conversations"))}</div>,
       size: 90,
     },
     {
       accessorKey: "leads",
       header: "Cadastros",
-      cell: ({ row }) => (
-        <div className="text-center">{toNumber(row.getValue("leads"))}</div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toNumber(row.getValue("leads"))}</div>,
       size: 90,
     },
     {
       accessorKey: "conversion_rate",
       header: "[Conversão] Vendas/Vis (%)",
-      cell: ({ row }) => (
-        <div className="text-center">
-          {toPercent(row.getValue("conversion_rate"))}
-        </div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toPercent(row.getValue("conversion_rate"))}</div>,
       size: 90,
     },
 
-    // --- BLOCO 6: TRÁFEGO ---
+    // --- BLOCO 5: TRÁFEGO E VÍDEO ---
     {
       accessorKey: "clicks",
       header: "Cliques no Link",
-      cell: ({ row }) => (
-        <div className="text-center">{toNumber(row.getValue("clicks"))}</div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toNumber(row.getValue("clicks"))}</div>,
       size: 90,
     },
     {
       accessorKey: "ctr",
       header: "CTR (Taxa de Clique)",
-      cell: ({ row }) => (
-        <div className="text-center">{toPercent(row.getValue("ctr"))}</div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toPercent(row.getValue("ctr"))}</div>,
       size: 90,
     },
     {
       accessorKey: "impressions",
       header: "Impressões",
-      cell: ({ row }) => (
-        <div className="text-center">
-          {toNumber(row.getValue("impressions"))}
-        </div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toNumber(row.getValue("impressions"))}</div>,
       size: 100,
     },
     {
       accessorKey: "frequency",
       header: "Frequência",
-      cell: ({ row }) => (
-        <div className="text-center">
-          {row.getValue<number>("frequency")?.toFixed(2)}
-        </div>
-      ),
+      cell: ({ row }) => <div className="text-center">{row.getValue<number>("frequency")?.toFixed(2)}</div>,
       size: 80,
     },
     {
       accessorKey: "page_views",
       header: "[Vis. de pág.]",
-      cell: ({ row }) => (
-        <div className="text-center">
-          {toNumber(row.getValue("page_views"))}
-        </div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toNumber(row.getValue("page_views"))}</div>,
       size: 90,
     },
     {
       accessorKey: "con_rate",
       header: "[CON] Taxa de Conexão",
-      cell: ({ row }) => (
-        <div className="text-center">{toPercent(row.getValue("con_rate"))}</div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toPercent(row.getValue("con_rate"))}</div>,
       size: 90,
-    },
-
-    // --- BLOCO 7: VÍDEO E ENGAJAMENTO ---
-    {
-      accessorKey: "video_retention",
-      header: "[Retenção] Vídeo 3s (%)",
-      cell: ({ row }) => (
-        <div className="text-center">
-          {toPercent(row.getValue("video_retention"))}
-        </div>
-      ),
-      size: 100,
     },
     {
       accessorKey: "hook_rate",
       header: "[Hook] Vídeo 3s/Imp (%)",
-      cell: ({ row }) => (
-        <div className="text-center">
-          {toPercent(row.getValue("hook_rate"))}
-        </div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toPercent(row.getValue("hook_rate"))}</div>,
       size: 100,
     },
     {
       accessorKey: "hold_rate",
       header: "[Hold Rate] Vídeo 75% (%)",
-      cell: ({ row }) => (
-        <div className="text-center">
-          {toPercent(row.getValue("hold_rate"))}
-        </div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toPercent(row.getValue("hold_rate"))}</div>,
       size: 100,
     },
     {
-      accessorKey: "followers",
-      header: "[Seguidores] Instagram",
-      cell: ({ row }) => (
-        <div className="text-center">{toNumber(row.getValue("followers"))}</div>
-      ),
+      accessorKey: "video_retention",
+      header: "[Retenção] Vídeo 100% (%)",
+      cell: ({ row }) => <div className="text-center">{toPercent(row.getValue("video_retention"))}</div>,
       size: 100,
     },
 
@@ -477,15 +342,14 @@ export const getColumns = (groupBy: string): ColumnDef<UtmRow>[] => {
     {
       accessorKey: "product_costs",
       header: "Custos de Produto",
-      cell: ({ row }) => (
-        <div className="text-center">
-          {toBRL(row.getValue("product_costs"))}
-        </div>
-      ),
+      cell: ({ row }) => <div className="text-center">{toBRL(row.getValue("product_costs"))}</div>,
       size: 110,
     },
-    { accessorKey: "ad_account", header: "[CA] Conta de Anúncio", size: 120 },
-    { accessorKey: "creation_date", header: "Criação", size: 100 },
-    { accessorKey: "delivery_status", header: "Veiculação", size: 100 },
+    {
+      accessorKey: "taxes",
+      header: "Impostos Meta Ads",
+      cell: ({ row }) => <div className="text-center">{toBRL(row.getValue("taxes"))}</div>,
+      size: 110,
+    },
   ];
 };

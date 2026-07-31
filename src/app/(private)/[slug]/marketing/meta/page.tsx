@@ -860,13 +860,13 @@ export default function GerenciadorMetaAdsPage() {
                   size="sm"
                   onClick={() => handleFetchData(true)}
                   disabled={isUpdating}
-                  className="group/btn relative overflow-hidden px-5 w-36 h-8 rounded-md border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 shadow-lg hover:shadow-2xl hover:shadow-blue-500/40 hover:scale-105 active:scale-95 transition-all duration-300 flex items-center justify-center disabled:opacity-80"
+                  className="group/btn relative overflow-hidden px-5 w-36 h-8 rounded-md border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 shadow-lg hover:shadow-2xl hover:shadow-blue-500/40 hover:scale-105 active:scale-95 transition-all duration-300 flex items-center justify-center disabled:opacity-80 cursor-pointer"
                 >
                   <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover/btn:translate-x-full transition-transform duration-0 group-hover/btn:duration-[1200ms] ease-out" />
                   {isUpdating ? (
                     <span className="flex items-center gap-2 text-white font-medium relative z-10">
                       <Loader2 className="w-4 h-4 animate-spin text-white/80" />
-                      Atualizando
+                      Atualizando...
                     </span>
                   ) : (
                     <span className="text-white font-medium relative z-10">

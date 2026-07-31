@@ -1,28 +1,58 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
 import crypto from "crypto";
+import { revalidatePath } from "next/cache";
 
-// 🔥 FUNÇÕES AUXILIARES DE PADRONIZAÇÃO
-function formatOrderNumber(number: string | number) {
-  if (!number) return "#0000";
-  const strNumber = String(number).trim();
-  return strNumber.startsWith('#') ? strNumber : `#${strNumber}`;
+// ==========================================
+// TIPAGENS ESTRITAS (SEM ANY)
+// ==========================================
+type OrderStatus =
+  | "PENDING"
+  | "PROCESSING"
+  | "CONFIRMED"
+  | "PREPARING"
+  | "SHIPPED"
+  | "DELIVERED"
+  | "CANCELLED"
+  | "RETURNED";
+
+type PaymentStatus = "PENDING" | "PAID" | "PARTIAL" | "REFUNDED" | "FAILED";
+
+interface PixelRules {
+  purchase?: {
+    config?: string;
+    value?: string;
+  };
 }
 
-function mapYampiPaymentStatus(status: string) {
+// 🔥 FUNÇÕES AUXILIARES DE PADRONIZAÇÃO
+function formatOrderNumber(number: string | number | null) {
+  if (!number) return "#0000";
+  const strNumber = String(number).trim();
+  return strNumber.startsWith("#") ? strNumber : `#${strNumber}`;
+}
+
+function mapYampiStatus(status: string): {
+  order: OrderStatus;
+  payment: PaymentStatus;
+} {
+  if (!status) return { order: "PENDING", payment: "PENDING" };
+
   switch (status) {
-    case 'paid': return 'PAID';
-    case 'canceled':
-    case 'refused': return 'FAILED';
-    case 'refunded': return 'REFUNDED';
-    default: return 'PENDING';
+    case "paid":
+      return { order: "CONFIRMED", payment: "PAID" };
+    case "canceled":
+    case "refused":
+      return { order: "CANCELLED", payment: "FAILED" };
+    case "refunded":
+      return { order: "RETURNED", payment: "REFUNDED" };
+    default:
+      return { order: "PENDING", payment: "PENDING" };
   }
 }
 
-// ==========================================
 // FUNÇÃO EXIGIDA PELA META (Criptografia SHA-256 para Email/Telefone)
-// ==========================================
-const hashData = (str?: string) => {
+const hashData = (str?: string | null) => {
   if (!str) return undefined;
   const cleanStr = str.trim().toLowerCase();
   return crypto.createHash("sha256").update(cleanStr).digest("hex");
@@ -30,50 +60,65 @@ const hashData = (str?: string) => {
 
 export async function POST(req: Request) {
   try {
-    // 1. Pega o ID da integração que está no link (Ex: ?id=cmnp7b...)
+    // 1. Pega o ID da integração que está no link
     const { searchParams } = new URL(req.url);
     const integrationId = searchParams.get("id");
 
     if (!integrationId) {
-      return NextResponse.json({ error: "ID da integração não fornecido." }, { status: 400 });
+      return NextResponse.json(
+        { error: "ID da integração não fornecido." },
+        { status: 400 },
+      );
     }
 
     // 2. Busca a Chave Secreta (Token) no Banco de Dados
     const integration = await prisma.storeIntegration.findUnique({
-      where: { id: integrationId }
+      where: { id: integrationId },
     });
 
     if (!integration || !integration.accessToken) {
-      return NextResponse.json({ error: "Integração não encontrada ou sem chave secreta." }, { status: 404 });
+      return NextResponse.json(
+        { error: "Integração não encontrada ou sem chave secreta." },
+        { status: 404 },
+      );
     }
 
     // 3. O COFRE BLINDADO: Verificação de Assinatura da Yampi
-    // Precisamos ler o "corpo" da requisição como texto puro para a matemática funcionar
     const rawBody = await req.text();
     const signatureRecebida = req.headers.get("x-yampi-hmac-sha256");
 
     if (!signatureRecebida) {
-      return NextResponse.json({ error: "Acesso Negado: Faltando assinatura de segurança." }, { status: 401 });
+      return NextResponse.json(
+        { error: "Acesso Negado: Faltando assinatura de segurança." },
+        { status: 401 },
+      );
     }
 
-    // Calcula a assinatura real usando a sua chave secreta
     const signatureCalculada = crypto
       .createHmac("sha256", integration.accessToken)
       .update(rawBody)
       .digest("base64");
 
     if (signatureRecebida !== signatureCalculada) {
-      console.error("🚨 [ALERTA DE SEGURANÇA] Tentativa de fraude no Webhook interceptada!");
-      return NextResponse.json({ error: "Acesso Negado: Assinatura inválida." }, { status: 401 });
+      console.error(
+        "🚨 [ALERTA DE SEGURANÇA] Tentativa de fraude no Webhook interceptada!",
+      );
+      return NextResponse.json(
+        { error: "Acesso Negado: Assinatura inválida." },
+        { status: 401 },
+      );
     }
 
-    // 4. Se passou pela segurança, lemos os dados da venda!
+    // 4. Lemos os dados da venda
     const body = JSON.parse(rawBody);
-    const eventType = body.event; 
+    const eventType = body.event;
     const orderData = body.resource || body.data;
 
     if (!orderData) {
-      return NextResponse.json({ message: "Nenhum dado de pedido encontrado." }, { status: 200 });
+      return NextResponse.json(
+        { message: "Nenhum dado de pedido encontrado." },
+        { status: 200 },
+      );
     }
 
     const statusAlias = orderData.status?.alias || "";
@@ -82,88 +127,158 @@ export async function POST(req: Request) {
 
     const rawOrderNumber = orderData.number || orderData.id;
     const orderNumber = formatOrderNumber(rawOrderNumber);
-    
+    const statuses = mapYampiStatus(statusAlias);
+
+    // ==========================================
+    // 5. EXTRATOR DE UTMs DA YAMPI
+    // ==========================================
+    // A Yampi geralmente joga as UTMs no objeto 'tracking' ou 'utm'
+    const webhookMetadata = orderData.tracking || orderData.utm || {};
+
+    const getParam = (key: string): string | null => {
+      if (webhookMetadata[key]) return String(webhookMetadata[key]);
+      if (orderData[key]) return String(orderData[key]);
+      return null;
+    };
+
+    const utm_campaign = getParam("utm_campaign") || getParam("campaign");
+    const utm_source = getParam("utm_source") || getParam("source");
+    const utm_medium = getParam("utm_medium") || getParam("medium");
+    const utm_content = getParam("utm_content") || getParam("content");
+    const utm_term = getParam("utm_term") || getParam("term");
+    const src = getParam("src");
+    const keyword = getParam("keyword");
+
+    const finalMetadataToSave =
+      Object.keys(webhookMetadata).length > 0 ? webhookMetadata : null;
+
     try {
       await prisma.order.upsert({
         where: {
           storeIntegrationId_externalOrderId: {
             storeIntegrationId: integration.id,
-            externalOrderId: String(orderData.id)
-          }
+            externalOrderId: String(orderData.id),
+          },
         },
         update: {
-          paymentStatus: mapYampiPaymentStatus(statusAlias),
+          status: statuses.order,
+          paymentStatus: statuses.payment,
           total: orderValue,
           updatedAt: new Date(),
+
+          // 🔥 Atualiza UTMs APENAS se o webhook enviá-las novamente
+          ...(utm_campaign && { utmCampaign: utm_campaign }),
+          ...(utm_source && { utmSource: utm_source }),
+          ...(utm_medium && { utmMedium: utm_medium }),
+          ...(utm_content && { utmContent: utm_content }),
+          ...(utm_term && { utmTerm: utm_term }),
+          ...(src && { src: src }),
+          ...(keyword && { keyword: keyword }),
+
+          ...(finalMetadataToSave && { metadata: finalMetadataToSave }),
         },
         create: {
           userId: integration.userId,
           storeIntegrationId: integration.id,
           externalOrderId: String(orderData.id),
-          orderNumber: orderNumber, // Salvando com a # obrigatória
-          
-          status: 'PENDING', // Logística inicial (quem resolve isso depois é a Nuvemshop/Shopify)
-          paymentStatus: mapYampiPaymentStatus(statusAlias),
-          
-          customerName: customer.name || 'Cliente Yampi',
+          orderNumber: orderNumber,
+
+          status: statuses.order,
+          paymentStatus: statuses.payment,
+
+          customerName: customer.name || "Cliente Yampi",
           customerEmail: customer.email || null,
           customerPhone: customer.phone?.full_number || null,
           customerDocument: customer.cpf || customer.cnpj || null,
-          
-          // Yampi geralmente envia o endereço dentro de shipping_address ou address
-          shippingAddress: orderData.shipping_address?.street || 'Não informado',
+
+          shippingAddress:
+            orderData.shipping_address?.street || "Não informado",
           shippingCity: orderData.shipping_address?.city || null,
           shippingState: orderData.shipping_address?.state || null,
           shippingZipCode: orderData.shipping_address?.zipcode || null,
-          
+
           subtotal: parseFloat(orderData.value_products) || orderValue,
           shippingCost: parseFloat(orderData.value_shipping) || 0,
           discount: parseFloat(orderData.value_discount) || 0,
           total: orderValue,
-          
           createdAt: new Date(orderData.created_at || Date.now()),
-        }
+
+          // 🔥 MAPEAMENTO DIRETO NAS COLUNAS NATIVAS
+          utmCampaign: utm_campaign,
+          utmSource: utm_source,
+          utmMedium: utm_medium,
+          utmContent: utm_content,
+          utmTerm: utm_term,
+          src: src,
+          keyword: keyword,
+          metadata: finalMetadataToSave,
+        },
       });
       console.log(`[Scale Drop] Pedido Yampi ${orderNumber} salvo no banco.`);
+
+      // Revalida as páginas para atualizar os dashboards em tempo real
+      revalidatePath("/marketing/utms");
+      revalidatePath("/dashboard");
     } catch (dbError) {
-      console.error("[Scale Drop] Erro ao salvar pedido Yampi no banco:", dbError);
-      // Não damos return erro aqui para não travar o envio do Pixel CAPI abaixo
+      console.error(
+        "[Scale Drop] Erro ao salvar pedido Yampi no banco:",
+        dbError,
+      );
     }
 
-    // 5. Busca o Pixel Ativo do Dono dessa Integração
+    // ==========================================
+    // 6. BUSCA DO PIXEL E REGRAS (SEM ANY)
+    // ==========================================
     const metaPixel = await prisma.metaPixel.findFirst({
       where: { userId: integration.userId, status: "Ativo" },
-      include: { user: true }
+      include: { user: true },
     });
 
     if (!metaPixel || !metaPixel.user.metaAccessToken) {
-      return NextResponse.json({ message: "Usuário sem Pixel ativo ou sem Token." }, { status: 200 });
+      return NextResponse.json(
+        { message: "Usuário sem Pixel ativo ou sem Token." },
+        { status: 200 },
+      );
     }
 
-    const rules = metaPixel.rules as any;
+    // Aplicação da tipagem rigorosa para evitar o 'any'
+    const rules = metaPixel.rules as unknown as PixelRules | null;
     const accessToken = metaPixel.user.metaAccessToken;
 
-    // 6. O FILTRO INTELIGENTE DE REGRAS
-    const purchaseConfig = rules?.purchase?.config || "Vendas pendentes e aprovadas";
+    // 7. O FILTRO INTELIGENTE DE REGRAS
+    const purchaseConfig =
+      rules?.purchase?.config || "Vendas pendentes e aprovadas";
     const valueConfig = rules?.purchase?.value || "Valor da venda";
 
     const isPaid = statusAlias === "paid" || eventType === "order.paid";
-    const isPending = statusAlias === "pending" || statusAlias === "waiting_payment";
+    const isPending =
+      statusAlias === "pending" || statusAlias === "waiting_payment";
 
     if (purchaseConfig === "Apenas vendas aprovadas" && !isPaid) {
-      console.log(`[Webhook Yampi] Venda ignorada pela regra do usuário: Apenas Aprovadas.`);
-      return NextResponse.json({ message: "Venda ignorada pela regra." }, { status: 200 });
+      console.log(
+        `[Webhook Yampi] Venda ignorada pela regra do usuário: Apenas Aprovadas.`,
+      );
+      return NextResponse.json(
+        { message: "Venda ignorada pela regra." },
+        { status: 200 },
+      );
     }
 
     if (!isPaid && !isPending) {
-      return NextResponse.json({ message: "Status não rastreável (Cancelado/Recusado)." }, { status: 200 });
+      return NextResponse.json(
+        { message: "Status não rastreável (Cancelado/Recusado)." },
+        { status: 200 },
+      );
     }
 
-    const finalValue = valueConfig === "Apenas comissão" ? orderValue * 0.10 : orderValue;
+    const finalValue =
+      valueConfig === "Apenas comissão" ? orderValue * 0.1 : orderValue;
 
-    // 7. MONTANDO E ENVIANDO PARA O FACEBOOK (CAPI)
+    // 8. MONTANDO E ENVIANDO PARA O FACEBOOK (CAPI)
     const timeNow = Math.floor(Date.now() / 1000);
-    const rawPhone = customer.phone?.full_number ? `55${customer.phone.full_number.replace(/\D/g, '')}` : "";
+    const rawPhone = customer.phone?.full_number
+      ? `55${customer.phone.full_number.replace(/\D/g, "")}`
+      : "";
 
     const capiEvent = {
       data: [
@@ -171,44 +286,50 @@ export async function POST(req: Request) {
           event_name: "Purchase",
           event_time: timeNow,
           action_source: "website",
-          event_source_url: "https://yampi.com.br/checkout", 
+          event_source_url: "https://yampi.com.br/checkout",
           user_data: {
             em: hashData(customer.email),
-            ph: hashData(rawPhone)
+            ph: hashData(rawPhone),
           },
           custom_data: {
             currency: "BRL",
             value: finalValue.toFixed(2),
-            order_id: orderData.id?.toString() || `YAMPI-${Date.now()}`
-          }
-        }
-      ]
+            order_id: orderData.id?.toString() || `YAMPI-${Date.now()}`,
+          },
+        },
+      ],
     };
 
-    // Envia para a contingência (todos os pixels cadastrados naquele card)
+    // Envia para a contingência
     for (const pixelId of metaPixel.pixelIds) {
       const fbUrl = `https://graph.facebook.com/v19.0/${pixelId}/events?access_token=${accessToken}`;
-      
+
       const fbRes = await fetch(fbUrl, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(capiEvent)
+        body: JSON.stringify(capiEvent),
       });
 
       const fbData = await fbRes.json();
-      
+
       if (fbData.error) {
-        console.error(`❌ [CAPI Webhook] Erro na Meta (Pixel ${pixelId}):`, fbData.error);
+        console.error(
+          `❌ [CAPI Webhook] Erro na Meta (Pixel ${pixelId}):`,
+          fbData.error,
+        );
       } else {
-        console.log(`✅ [CAPI Webhook] Venda Yampi (R$ ${finalValue}) -> Pixel ${pixelId} com Sucesso!`);
+        console.log(
+          `✅ [CAPI Webhook] Venda Yampi (R$ ${finalValue}) -> Pixel ${pixelId} com Sucesso!`,
+        );
       }
     }
 
-    // 8. Responde 200 para a Yampi saber que recebemos
     return NextResponse.json({ success: true }, { status: 200 });
-
   } catch (error) {
     console.error("Erro fatal no Webhook da Yampi:", error);
-    return NextResponse.json({ error: "Erro interno do servidor." }, { status: 500 });
+    return NextResponse.json(
+      { error: "Erro interno do servidor." },
+      { status: 500 },
+    );
   }
 }

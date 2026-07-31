@@ -65,22 +65,22 @@ const PRODUCTS = [
 // 🔥 DEFINE AS COLUNAS PADRÕES BASEADAS NA SUA IMAGEM
 // Os IDs precisam bater exatamente com o campo "id" do meta-metrics.ts
 const DEFAULT_COLUMNS = [
-  "sales",       // Vendas
-  "cpa",         // CPA
-  "spent",       // Gastos
-  "taxes",       // Despesas
-  "revenue",     // Faturamento
-  "profit",      // Lucro
-  "roas",        // ROAS
-  "margin",      // Margem
-  "roi",         // ROI
-  "ic",          // IC
-  "cpi",         // CPI
-  "cpc",         // CPC
-  "ctr",         // CTR
-  "cpm",         // CPM
+  "sales", // Vendas
+  "cpa", // CPA
+  "spent", // Gastos
+  "taxes", // Despesas
+  "revenue", // Faturamento
+  "profit", // Lucro
+  "roas", // ROAS
+  "margin", // Margem
+  "roi", // ROI
+  "ic", // IC
+  "cpi", // CPI
+  "cpc", // CPC
+  "ctr", // CTR
+  "cpm", // CPM
   "impressions", // Impressões
-  "clicks",      // Cliques
+  "clicks", // Cliques
 ];
 
 export default function ReportsPage() {
@@ -142,7 +142,10 @@ export default function ReportsPage() {
 
     // 2. Salva no LocalStorage
     if (typeof window !== "undefined") {
-      localStorage.setItem("relatorios_table_columns", JSON.stringify(newOrder));
+      localStorage.setItem(
+        "relatorios_table_columns",
+        JSON.stringify(newOrder),
+      );
     }
 
     // 🚀 Lógica futura para salvar no Banco de Dados (Descomente quando integrar a API)
@@ -331,7 +334,16 @@ export default function ReportsPage() {
     <div className="flex flex-col h-screen w-full bg-background overflow-hidden relative">
       {isHeaderVisible && (
         <div className="sticky top-0 shrink-0 w-full px-6 pt-6 pb-4 border-b border-border/30 transition-all backdrop-blur-md shadow-sm z-30 animate-in slide-in-from-top-2 duration-200">
-          <MarketingHeader user={currentUser} hideControls={true} />
+          <MarketingHeader
+            user={currentUser}
+            showValues={true} // 🔥 Força a exibição dos números
+            setShowValues={() => {}} // Função vazia só para cumprir a tipagem
+            isEditing={false}
+            setIsEditing={() => {}}
+            hideControls={true} // Mantém o olho escondido
+            onSave={() => {}}
+            onReset={() => {}}
+          />
         </div>
       )}
 
@@ -348,7 +360,6 @@ export default function ReportsPage() {
               </h2>
 
               <div className="flex items-center bg-muted/40 rounded-lg p-1 border border-border/50 h-9">
-                
                 {/* 🔥 SEU MODAL COLUMNCUSTOMIZER (Que agora atualiza o columnOrder) */}
                 <ColumnCustomizer
                   currentColumns={columnOrder}

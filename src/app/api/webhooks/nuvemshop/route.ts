@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
 
 // Funções auxiliares para traduzir os status da Nuvemshop para os Enums do Scale Drop
 function mapOrderStatus(nsStatus: string) {
@@ -29,6 +30,13 @@ function mapPaymentStatus(nsPaymentStatus: string) {
     default:
       return "PENDING";
   }
+}
+
+// 🔥 Garante que o pedido sempre tenha a hashtag
+function formatOrderNumber(number: string | number | null) {
+  if (!number) return "#0000";
+  const strNumber = String(number).trim();
+  return strNumber.startsWith("#") ? strNumber : `#${strNumber}`;
 }
 
 export async function POST(request: Request) {
@@ -62,18 +70,43 @@ export async function POST(request: Request) {
     // 2. Filtrar eventos de pedido
     if (event === "order/created" || event === "order/updated") {
       const externalOrderId = String(body.id);
+      const rawOrderNumber = body.number || body.id;
+      const orderNumber = formatOrderNumber(rawOrderNumber);
 
-      // 3. Salvar ou Atualizar alinhado com o model Order
-      const orderNumber = String(body.number);
+      // ==========================================
+      // 3. EXTRATOR DE UTMs (100% Tipado, sem "any")
+      // ==========================================
+      // A Nuvemshop costuma agrupar rastreios em client_details, mas olhamos metadados também.
+      const webhookMetadata =
+        body.metadata || body.tracking || body.client_details || {};
 
-      // Procura se esse pedido já existe no banco (mesmo que tenha vindo de outra integração, como Yampi/Pagar.me)
+      const getParam = (key: string): string | null => {
+        if (webhookMetadata[key]) return String(webhookMetadata[key]);
+        if (body[key]) return String(body[key]);
+        return null;
+      };
+
+      const utm_campaign = getParam("utm_campaign");
+      const utm_source = getParam("utm_source");
+      const utm_medium = getParam("utm_medium");
+      const utm_content = getParam("utm_content");
+      const utm_term = getParam("utm_term");
+      const src = getParam("src");
+      const keyword = getParam("keyword");
+
+      const finalMetadataToSave =
+        Object.keys(webhookMetadata).length > 0 ? webhookMetadata : null;
+
+      // ==========================================
+      // 4. LÓGICA DE DEDUPLICAÇÃO E SALVAMENTO
+      // ==========================================
       const existingOrder = await prisma.order.findFirst({
         where: {
           userId: integration.userId,
           orderNumber: orderNumber,
         },
         include: {
-          storeIntegration: true, // Trazemos os dados da integração para saber quem criou
+          storeIntegration: true,
         },
       });
 
@@ -81,25 +114,28 @@ export async function POST(request: Request) {
       const nsPaymentStatus = mapPaymentStatus(body.payment_status);
 
       if (existingOrder) {
-        // O pedido já existe! Vamos verificar quem é o "Dono" dele.
         const isGatewayOrder =
           existingOrder.storeIntegration.platform !== "NUVEMSHOP";
 
         if (isGatewayOrder) {
-          // Se foi criado por um Gateway/Checkout, a Nuvemshop APENAS atualiza logística.
-          // Não tocamos em valores, taxas ou paymentStatus.
+          // Mantive a sua regra de ouro: Se é do Gateway, a NS só toca na logística
           await prisma.order.update({
             where: { id: existingOrder.id },
             data: {
-              status: nsStatus, // Atualiza apenas se foi enviado, entregue, etc.
+              status: nsStatus,
               updatedAt: new Date(),
+              // Adicionamos UTMs apenas se vieram vazias do Gateway (fallback)
+              ...(utm_campaign &&
+                !existingOrder.utmCampaign && { utmCampaign: utm_campaign }),
+              ...(utm_source &&
+                !existingOrder.utmSource && { utmSource: utm_source }),
             },
           });
           console.log(
             `[Scale Drop] Pedido ${orderNumber} deduplicado. Logística atualizada pela Nuvemshop.`,
           );
         } else {
-          // Se já era da Nuvemshop mesmo, atualiza tudo normalmente
+          // Se já era da Nuvemshop mesmo, atualiza valores, status E as UTMs
           await prisma.order.update({
             where: { id: existingOrder.id },
             data: {
@@ -107,6 +143,15 @@ export async function POST(request: Request) {
               paymentStatus: nsPaymentStatus,
               total: body.total || existingOrder.total,
               updatedAt: new Date(),
+              // Atualiza UTMs apenas se enviadas
+              ...(utm_campaign && { utmCampaign: utm_campaign }),
+              ...(utm_source && { utmSource: utm_source }),
+              ...(utm_medium && { utmMedium: utm_medium }),
+              ...(utm_content && { utmContent: utm_content }),
+              ...(utm_term && { utmTerm: utm_term }),
+              ...(src && { src: src }),
+              ...(keyword && { keyword: keyword }),
+              ...(finalMetadataToSave && { metadata: finalMetadataToSave }),
             },
           });
           console.log(
@@ -114,7 +159,7 @@ export async function POST(request: Request) {
           );
         }
       } else {
-        // Se o pedido não existe em lugar nenhum, criamos do zero (Venda nativa)
+        // Se não existe, cria do zero com todas as colunas nativas (Venda Nativa)
         await prisma.order.create({
           data: {
             userId: integration.userId,
@@ -140,6 +185,16 @@ export async function POST(request: Request) {
             discount: body.discount || 0,
             total: body.total || 0,
             createdAt: new Date(body.created_at),
+
+            // 🔥 MAPEAMENTO DIRETO NAS COLUNAS NATIVAS
+            utmCampaign: utm_campaign,
+            utmSource: utm_source,
+            utmMedium: utm_medium,
+            utmContent: utm_content,
+            utmTerm: utm_term,
+            src: src,
+            keyword: keyword,
+            metadata: finalMetadataToSave,
           },
         });
         console.log(
@@ -147,9 +202,9 @@ export async function POST(request: Request) {
         );
       }
 
-      console.log(
-        `[Scale Drop] Pedido ${externalOrderId} processado com sucesso.`,
-      );
+      // 🔥 Revalida o cache para as telas de relatórios atualizarem em tempo real!
+      revalidatePath("/marketing/utms");
+      revalidatePath("/dashboard");
     }
 
     return NextResponse.json({ received: true }, { status: 200 });

@@ -23,10 +23,10 @@ export async function POST(req: Request) {
       );
     }
 
-    // 2. BUSCA O DONO DA INTEGRAÇÃO (Exigência do seu Schema: userId)
+    // 2. BUSCA O DONO DA INTEGRAÇÃO
     const integration = await prisma.storeIntegration.findUnique({
       where: { id: integrationId },
-      select: { userId: true }, // Precisamos apenas do ID do usuário
+      select: { userId: true },
     });
 
     if (!integration) {
@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     const amountInReais = data?.amount ? data.amount / 100 : 0;
     const paymentMethod = data?.charges?.[0]?.payment_method || "unknown";
 
-    // 4. Mapeamento de Status respeitando estritamente os seus Enums
+    // 4. Mapeamento de Status
     let orderStatus:
       | "PENDING"
       | "PROCESSING"
@@ -63,8 +63,8 @@ export async function POST(req: Request) {
       "PENDING";
 
     if (type === "order.paid") {
-      orderStatus = "CONFIRMED"; // Pedido confirmado!
-      paymentStatus = "PAID"; // Pagamento pago!
+      orderStatus = "CONFIRMED";
+      paymentStatus = "PAID";
     } else if (type === "order.payment_failed") {
       orderStatus = "CANCELLED";
       paymentStatus = "FAILED";
@@ -76,7 +76,6 @@ export async function POST(req: Request) {
       paymentStatus = "REFUNDED";
     }
 
-    // Apenas processa se for um evento que nos importa
     if (
       [
         "order.created",
@@ -90,14 +89,22 @@ export async function POST(req: Request) {
         `[DB] 💾 Salvando pedido -> Pagamento: ${paymentStatus} | Pedido: ${orderStatus}`,
       );
 
-      // 🔥 PADRONIZAÇÃO DO NÚMERO DO PEDIDO
       const rawOrderNumber = data.code || data.id;
       const orderNumberFormatted = formatOrderNumber(rawOrderNumber);
 
-      // 🔥 CAPTURA O METADATA (Se houver)
-      const webhookMetadata = data.metadata ? data.metadata : undefined;
+      // 🔥 EXTRATOR DE UTMs DE ALTA PERFORMANCE
+      // Lemos o metadata da Pagar.me e extraímos as chaves exatas do seu script
+      const webhookMetadata = data.metadata || {};
 
-      // 5. O UPSERT Perfeito (Baseado 100% no seu schema)
+      const utm_campaign = webhookMetadata.utm_campaign || null;
+      const utm_source = webhookMetadata.utm_source || null;
+      const utm_medium = webhookMetadata.utm_medium || null;
+      const utm_content = webhookMetadata.utm_content || null;
+      const utm_term = webhookMetadata.utm_term || null;
+      const src = webhookMetadata.src || null;
+      const keyword = webhookMetadata.keyword || null;
+
+      // 5. O UPSERT Perfeito
       await prisma.order.upsert({
         where: {
           storeIntegrationId_externalOrderId: {
@@ -108,9 +115,18 @@ export async function POST(req: Request) {
         update: {
           status: orderStatus,
           paymentStatus: paymentStatus,
-          // Atualiza o metadata apenas se o Webhook mandar dados novos,
-          // evitando apagar o trackeamento na troca de status!
-          ...(webhookMetadata && { metadata: webhookMetadata }),
+          // 🔥 Atualiza UTMs APENAS se o webhook enviá-las novamente
+          ...(utm_campaign && { utmCampaign: utm_campaign }),
+          ...(utm_source && { utmSource: utm_source }),
+          ...(utm_medium && { utmMedium: utm_medium }),
+          ...(utm_content && { utmContent: utm_content }),
+          ...(utm_term && { utmTerm: utm_term }),
+          ...(src && { src: src }),
+          ...(keyword && { keyword: keyword }),
+          // Mantém o metadata bruto se houver novos dados
+          ...(Object.keys(webhookMetadata).length > 0 && {
+            metadata: webhookMetadata,
+          }),
         },
         create: {
           userId: integration.userId,
@@ -118,35 +134,37 @@ export async function POST(req: Request) {
           externalOrderId: data.id,
           orderNumber: orderNumberFormatted,
 
-          // Valores
           total: amountInReais,
           subtotal: amountInReais,
 
-          // Status Enums
           status: orderStatus,
           paymentStatus: paymentStatus,
           paymentMethod: paymentMethod,
 
-          // Dados do cliente
           customerName: data?.customer?.name || "Cliente Pagar.me",
           customerEmail: data?.customer?.email || "",
           customerDocument: data?.customer?.document || "",
-
-          // Endereço
           shippingAddress: "Endereço não informado via Webhook",
 
-          // 🔥 SALVA O TRACKEAMENTO AQUI!
-          metadata: webhookMetadata || null,
+          // 🔥 MAPEAMENTO DIRETO NAS COLUNAS NATIVAS
+          utmCampaign: utm_campaign,
+          utmSource: utm_source,
+          utmMedium: utm_medium,
+          utmContent: utm_content,
+          utmTerm: utm_term,
+          src: src,
+          keyword: keyword,
+
+          metadata:
+            Object.keys(webhookMetadata).length > 0 ? webhookMetadata : null,
         },
       });
 
-      // Atualiza o cache da Dashboard instantaneamente
       revalidatePath("/dashboard");
     } else {
       console.log(`⚪ Evento secundário ignorado: ${type}`);
     }
 
-    // Retorna rápido para a Pagar.me
     return NextResponse.json({ received: true }, { status: 200 });
   } catch (error) {
     console.error(

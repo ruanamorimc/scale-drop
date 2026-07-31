@@ -1,5 +1,6 @@
 import { NextResponse } from "next/server";
 import prisma from "@/lib/prisma";
+import { revalidatePath } from "next/cache";
 
 // 🔥 FUNÇÃO AUXILIAR DE PADRONIZAÇÃO E TIPAGEM
 function formatOrderNumber(number: string | number | null) {
@@ -18,6 +19,12 @@ type OrderStatus =
   | "CANCELLED"
   | "RETURNED";
 type PaymentStatus = "PENDING" | "PAID" | "PARTIAL" | "REFUNDED" | "FAILED";
+
+// type rigorosa para os atributos da Shopify
+type NoteAttribute = {
+  name: string;
+  value: string;
+};
 
 export async function POST(req: Request) {
   try {
@@ -79,13 +86,44 @@ export async function POST(req: Request) {
     }
 
     // ==========================================
-    // 3. SALVANDO NO BANCO DE DADOS (UPSERT)
+    // 3. EXTRATOR DE UTMs (Padrão Shopify note_attributes)
     // ==========================================
-    // 🔥 3. LÓGICA DE DEDUPLICAÇÃO INTELIGENTE
+    const noteAttributes: NoteAttribute[] = Array.isArray(body.note_attributes)
+      ? body.note_attributes
+      : [];
+
+    const getParam = (key: string): string | null => {
+      // 1º Tenta pegar da raiz do payload (alguns scripts jogam aqui)
+      if (body[key]) return String(body[key]);
+
+      // 2º Tenta pegar do array de note_attributes (comum na Shopify)
+      const attr = noteAttributes.find(
+        (n: NoteAttribute) => n.name === key || n.name === `_${key}`,
+      );
+      if (attr) return String(attr.value);
+
+      return null;
+    };
+
+    const utm_campaign = getParam("utm_campaign");
+    const utm_source = getParam("utm_source");
+    const utm_medium = getParam("utm_medium");
+    const utm_content = getParam("utm_content");
+    const utm_term = getParam("utm_term");
+    const src = getParam("src");
+    const keyword = getParam("keyword");
+
+    const finalMetadataToSave =
+      noteAttributes.length > 0
+        ? { note_attributes: noteAttributes as Record<string, string>[] }
+        : undefined;
+
+    // ==========================================
+    // 4. LÓGICA DE DEDUPLICAÇÃO E UPSERT INTELIGENTE
+    // ==========================================
     const rawOrderNumber = body.order_number || body.name || externalOrderId;
     const orderNumber = formatOrderNumber(rawOrderNumber);
 
-    // Procura se o pedido já existe (talvez criado por Yampi/Appmax)
     const existingOrder = await prisma.order.findFirst({
       where: {
         userId: integration.userId,
@@ -106,24 +144,38 @@ export async function POST(req: Request) {
         order = await prisma.order.update({
           where: { id: existingOrder.id },
           data: {
-            status: orderStatus, // Sem any!
+            status: orderStatus,
             trackingNumber: trackingNumber || existingOrder.trackingNumber,
             updatedAt: new Date(),
+            // 🔥 Adicionamos UTMs apenas se vieram vazias do Gateway (fallback de segurança)
+            ...(utm_campaign &&
+              !existingOrder.utmCampaign && { utmCampaign: utm_campaign }),
+            ...(utm_source &&
+              !existingOrder.utmSource && { utmSource: utm_source }),
           },
         });
         console.log(
           `[Scale Drop] Pedido Shopify ${orderNumber} deduplicado. Logística atualizada.`,
         );
       } else {
-        // Se já era da Shopify mesmo, atualiza tudo
+        // Se já era da Shopify mesmo, atualiza tudo (Status, Valores e UTMs)
         order = await prisma.order.update({
           where: { id: existingOrder.id },
           data: {
-            status: orderStatus, // Sem any!
-            paymentStatus: paymentStatus, // Sem any!
+            status: orderStatus,
+            paymentStatus: paymentStatus,
             trackingNumber: trackingNumber || existingOrder.trackingNumber,
             total: parseFloat(body.total_price) || existingOrder.total,
             updatedAt: new Date(),
+            // Atualiza UTMs apenas se enviadas
+            ...(utm_campaign && { utmCampaign: utm_campaign }),
+            ...(utm_source && { utmSource: utm_source }),
+            ...(utm_medium && { utmMedium: utm_medium }),
+            ...(utm_content && { utmContent: utm_content }),
+            ...(utm_term && { utmTerm: utm_term }),
+            ...(src && { src: src }),
+            ...(keyword && { keyword: keyword }),
+            ...(finalMetadataToSave && { metadata: finalMetadataToSave }),
           },
         });
         console.log(`[Scale Drop] Pedido Shopify ${orderNumber} atualizado.`);
@@ -137,8 +189,8 @@ export async function POST(req: Request) {
           externalOrderId: externalOrderId,
           orderNumber: orderNumber,
 
-          status: orderStatus, // Sem any!
-          paymentStatus: paymentStatus, // Sem any!
+          status: orderStatus,
+          paymentStatus: paymentStatus,
 
           customerName: customerName,
           customerEmail: customerEmail,
@@ -160,17 +212,25 @@ export async function POST(req: Request) {
 
           trackingNumber: trackingNumber,
           createdAt: new Date(body.created_at || Date.now()),
+
+          // 🔥 MAPEAMENTO DIRETO NAS COLUNAS NATIVAS
+          utmCampaign: utm_campaign,
+          utmSource: utm_source,
+          utmMedium: utm_medium,
+          utmContent: utm_content,
+          utmTerm: utm_term,
+          src: src,
+          keyword: keyword,
+          metadata: finalMetadataToSave,
         },
       });
       console.log(`[Scale Drop] Novo pedido Shopify ${orderNumber} criado.`);
     }
 
     // ==========================================
-    // 4. CRIANDO EVENTO NA TIMELINE
+    // 5. CRIANDO EVENTO NA TIMELINE
     // ==========================================
-    // Se o pedido foi enviado e tem rastreio, criamos um evento na timeline
     if (orderStatus === "SHIPPED" && trackingNumber) {
-      // Verifica se já registramos esse envio para não duplicar na timeline
       const existingEvent = await prisma.trackingEvent.findFirst({
         where: { orderId: order.id, status: "SHIPPED" },
       });
@@ -179,13 +239,17 @@ export async function POST(req: Request) {
         await prisma.trackingEvent.create({
           data: {
             orderId: order.id,
-            status: "A Caminho", // Status visual que vai aparecer na nossa interface
+            status: "A Caminho",
             description: `Objeto despachado. Código liberado pela transportadora ${trackingCompany || ""}.`,
             date: new Date(),
           },
         });
       }
     }
+
+    // 🔥 Revalida o cache para atualizar as telas de UTMs e Dashboard imediatamente!
+    revalidatePath("/marketing/utms");
+    revalidatePath("/dashboard");
 
     console.log(
       `✅ [SHOPIFY WEBHOOK] Pedido ${order.orderNumber} processado! Status: ${orderStatus} | Tópico: ${shopifyTopic}`,

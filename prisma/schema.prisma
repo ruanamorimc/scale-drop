@@ -57,6 +57,13 @@ model User {
   metaAccounts    MetaAccount[] // Contas de anúncio ativadas
   metaPixels      MetaPixel[] // Pixels configurados via CAPI
 
+  // 🔥 NOVOS RELACIONAMENTOS PARA MARKETING (GOOGLE ADS)
+  googleAccessToken    String?   // Token de acesso (expira em 1h)
+  googleRefreshToken   String?   // Token de renovação (NUNCA expira, a menos que revogado)
+  googleTokenExpiresAt DateTime? // Para sabermos a hora exata de usar o Refresh Token
+  googleAccounts       GoogleAccount[] // Contas de anúncio do Google ativadas
+  googlePixels         GooglePixel[] // Pixels configurados via CAPI
+
   // 🔥 NOVOS RELACIONAMENTOS PARA WORKSPACES
   workspaces Workspace[]
 
@@ -454,6 +461,45 @@ model MetaPixel {
 }
 
 // ============================================
+// INTEGRAÇÕES DE MARKETING (GOOGLE ADS)
+// ============================================
+
+model GoogleAccount {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  accountId String   // Customer ID da Conta do Google Ads (Ex: 123-456-7890)
+  name      String   // Nome da Conta de Anúncios (Descriptive Name)
+  isActive  Boolean  @default(true) // Se o switch estiver ligado na tela
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, accountId])
+  @@index([userId])
+  @@map("google_account")
+}
+
+model GooglePixel {
+  id        String   @id @default(cuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  name      String
+  type      String   @default("google")
+  pixelIds  String[] // Aqui o usuário vai colocar o ID, ex: AW-123456789
+  status    String   @default("Ativo")
+  rules     Json     @default("{}")
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([userId])
+  @@map("google_pixel")
+}
+
+// ============================================
 // PRODUTOS
 // ============================================
 
@@ -652,6 +698,15 @@ model Order {
 
   // Metadados
   metadata Json? // Dados adicionais da loja
+
+  // 🔥 Campos de Rastreamento (UTMs)
+  utmCampaign  String?
+  utmSource    String?
+  utmMedium    String?
+  utmContent   String?
+  utmTerm      String?
+  src          String?
+  keyword      String?
 
   createdAt   DateTime   @default(now())
   updatedAt   DateTime   @updatedAt

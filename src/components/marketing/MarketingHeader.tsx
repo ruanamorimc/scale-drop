@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import {
@@ -17,6 +18,9 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+
+import { getRealRevenue } from "@/actions/header-actions";
+
 interface UserData {
   name: string;
   email: string;
@@ -44,23 +48,29 @@ export function MarketingHeader({
   onSave,
   onReset,
   hideControls,
-  currentRevenue = 0,
 }: MarketingHeaderProps) {
-  // 1. Lógica de Metas (Dinâmica)
+  const [realRevenue, setRealRevenue] = useState<number>(0);
+
+  // O próprio componente vai atrás do faturamento usando o e-mail do usuário
+  useEffect(() => {
+    if (user?.email) {
+      getRealRevenue(user.email).then((revenue) => {
+        setRealRevenue(revenue);
+      });
+    }
+  }, [user?.email]);
+
   const getNextMilestone = (revenue: number) => {
-    if (revenue < 10000) return 10000; // Meta 10k
-    if (revenue < 100000) return 100000; // Meta 100k
-    if (revenue < 500000) return 500000; // Meta 500k
-    if (revenue < 1000000) return 1000000; // Meta 1M
-    return 5000000; // Meta 5M
+    if (revenue < 10000) return 10000;
+    if (revenue < 100000) return 100000;
+    if (revenue < 500000) return 500000;
+    if (revenue < 1000000) return 1000000;
+    return 5000000;
   };
 
-  const nextGoal = getNextMilestone(currentRevenue);
+  const nextGoal = getNextMilestone(realRevenue);
+  const progressPercentage = Math.min((realRevenue / nextGoal) * 100, 100);
 
-  // 2. Cálculo da Porcentagem (Limitada a 100%)
-  const progressPercentage = Math.min((currentRevenue / nextGoal) * 100, 100);
-
-  // 3. Formatador de Moeda Curto (ex: 15 mil)
   const formatShortCurrency = (value: number) => {
     if (value >= 1000000) return `R$ ${(value / 1000000).toFixed(0)}M`;
     if (value >= 1000) return `R$ ${(value / 1000).toFixed(0)} mil`;
@@ -79,10 +89,8 @@ export function MarketingHeader({
       .join("")
       .toUpperCase() || "US";
 
-  // --- MODO DE EDIÇÃO ---
   if (isEditing) {
     return (
-      // 🔥 A SUPER TRAVA: z-[99999], isolation e sticky top-0
       <div
         className="sticky top-0 left-0 w-full z-[99999] flex items-center justify-between px-5 py-4 mb-6 rounded-b-xl md:rounded-xl bg-[#272e48] text-white shadow-2xl"
         style={{ isolation: "isolate" }}
@@ -102,13 +110,12 @@ export function MarketingHeader({
             type="button"
             variant="ghost"
             size="sm"
-            style={{ cursor: "pointer" }}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
               onReset();
             }}
-            className="text-slate-300 hover:text-white hover:bg-white/10 gap-2 font-normal z-50"
+            className="text-slate-300 hover:text-white hover:bg-white/10 gap-2 font-normal z-50 cursor-pointer"
           >
             <RotateCcw size={14} /> Redefinir configurações
           </Button>
@@ -117,19 +124,16 @@ export function MarketingHeader({
             type="button"
             variant="outline"
             size="sm"
-            style={{ cursor: "pointer" }}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              const y = window.scrollY; // Guarda a posição exata
-              setIsEditing(false); // Desmonta a edição
-
-              // 🔥 O truque definitivo: Espera o React atualizar a DOM e crava a tela no lugar
+              const y = window.scrollY;
+              setIsEditing(false);
               setTimeout(() => {
                 window.scrollTo({ top: y, behavior: "instant" });
               }, 10);
             }}
-            className="bg-transparent text-white border-slate-500 hover:bg-white/10 z-50"
+            className="bg-transparent text-white border-slate-500 hover:bg-white/10 z-50 cursor-pointer"
           >
             Cancelar
           </Button>
@@ -137,19 +141,16 @@ export function MarketingHeader({
           <Button
             type="button"
             size="sm"
-            style={{ cursor: "pointer" }}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
               const y = window.scrollY;
-
-              onSave(); // Salva no banco
-
+              onSave();
               setTimeout(() => {
                 window.scrollTo({ top: y, behavior: "instant" });
               }, 10);
             }}
-            className="bg-white text-[#272e48] hover:bg-gray-100 font-semibold px-6 shadow-sm z-50"
+            className="bg-white text-[#272e48] hover:bg-gray-100 font-semibold px-6 shadow-sm z-50 cursor-pointer"
           >
             Salvar
           </Button>
@@ -158,7 +159,6 @@ export function MarketingHeader({
     );
   }
 
-  // --- MODO PADRÃO ---
   return (
     <div className="flex flex-col md:flex-row items-start md:items-center justify-between gap-4 w-full p-4 rounded-xl border border-border bg-card/50 backdrop-blur-sm shadow-sm transition-all">
       <div className="flex items-center gap-4">
@@ -176,7 +176,7 @@ export function MarketingHeader({
                     variant="ghost"
                     size="icon"
                     onClick={() => setShowValues(!showValues)}
-                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                    className="h-8 w-8 text-muted-foreground hover:text-foreground cursor-pointer"
                   >
                     {showValues ? <Eye size={18} /> : <EyeOff size={18} />}
                   </Button>
@@ -194,7 +194,7 @@ export function MarketingHeader({
                     variant="ghost"
                     size="icon"
                     onClick={() => setIsEditing(true)}
-                    className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                    className="h-8 w-8 text-muted-foreground hover:text-foreground cursor-pointer"
                   >
                     <Pencil size={18} />
                   </Button>
@@ -214,7 +214,6 @@ export function MarketingHeader({
             <Trophy size={16} className="text-yellow-500" />
             <span className="font-medium text-foreground">Prêmios</span>
 
-            {/* 🔥 TOOLTIP RICO (Imagem 2) */}
             <TooltipProvider>
               <Tooltip delayDuration={200}>
                 <TooltipTrigger asChild>
@@ -235,28 +234,19 @@ export function MarketingHeader({
                     <p className="text-[11px] text-zinc-400">
                       Baseado no faturamento trackeado com a ScaleDrop.
                     </p>
-                    <div className="flex flex-col gap-0.5 pt-1">
-                      <span className="text-[10px] text-zinc-500 font-medium">
-                        (atualizado semanalmente)
-                      </span>
-                      {/*                       <span className="text-[10px] text-zinc-500 font-medium">
-                        [apenas para assinantes]
-                      </span> */}
-                    </div>
                   </div>
                 </TooltipContent>
               </Tooltip>
             </TooltipProvider>
 
-            {/* 🔥 TEXTO DA META DINÂMICO */}
+            {/* Respeita rigorosamente o botão do olho (showValues) */}
             <span className="ml-1 font-mono text-[11px] opacity-80">
-              {formatShortCurrency(currentRevenue)}{" "}
-              <span className="text-muted-foreground/50">/</span>{" "}
-              {formatShortCurrency(nextGoal)}
+              {showValues ? formatShortCurrency(realRevenue) : "R$ ****"}
+              <span className="text-muted-foreground/50 mx-1">/</span>
+              {showValues ? formatShortCurrency(nextGoal) : "R$ ****"}
             </span>
           </div>
 
-          {/* 🔥 BARRA DE PROGRESSO FUNCIONAL */}
           <div className="w-full sm:w-64 h-2 bg-muted rounded-full overflow-hidden relative">
             <div
               className="h-full bg-gradient-to-r from-blue-600 to-cyan-500 transition-all duration-1000 ease-out rounded-full"

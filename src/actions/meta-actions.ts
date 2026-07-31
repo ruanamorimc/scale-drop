@@ -61,6 +61,31 @@ interface MetaItem {
   };
 }
 
+export async function disconnectMetaAds(userId: string) {
+  try {
+    // 1. Limpa o token do Meta do usuário
+    await prisma.user.update({
+      where: { id: userId },
+      data: {
+        metaAccessToken: null,
+      },
+    });
+
+    // 2. Apaga as contas de anúncio que estavam vinculadas a ele
+    await prisma.metaAccount.deleteMany({
+      where: { userId: userId },
+    });
+
+    // Opcional: Se você quiser apagar os Pixels também quando ele desconectar, descomente a linha abaixo:
+    // await prisma.metaPixel.deleteMany({ where: { userId: userId } });
+
+    return { success: true };
+  } catch (error) {
+    console.error("Erro ao desconectar Meta Ads:", error);
+    return { success: false, error: "Erro interno ao desconectar." };
+  }
+}
+
 // 1. BUSCAR TODOS OS PIXELS DO USUÁRIO
 export async function getMetaPixels(userId: string) {
   try {

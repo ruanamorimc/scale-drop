@@ -24,11 +24,13 @@ import "gridstack/dist/gridstack.css";
 interface ColumnCustomizerProps {
   currentColumns: string[];
   onSave: (newOrder: string[]) => void;
+  variant?: "meta" | "utms"; // 🔥 Nova propriedade para identificar a tela atual
 }
 
 export function ColumnCustomizer({
   currentColumns,
   onSave,
+  variant = "meta", // Padrão é 'meta' para não quebrar suas outras telas
 }: ColumnCustomizerProps) {
   const [open, setOpen] = useState(false);
   const [search, setSearch] = useState("");
@@ -38,12 +40,10 @@ export function ColumnCustomizer({
   const gridInstance = useRef<GridStack | null>(null);
 
   // ============================================================================
-  // ORDEM CRONOLÓGICA DE FUNÇÕES (Evita erros de referência e hooks ausentes)
+  // ORDEM CRONOLÓGICA DE FUNÇÕES
   // ============================================================================
 
-  // 1. REMOVE WIDGET (Declarado primeiro porque o botão de "Adicionar" vai precisar dele)
   const handleRemove = useCallback((id: string) => {
-    // Não permite remover 'name'
     if (id === "name") return;
 
     setSelectedIds((prev) => prev.filter((item) => item !== id));
@@ -58,14 +58,12 @@ export function ColumnCustomizer({
     }
   }, []);
 
-  // 2. ADICIONAR WIDGET (Declarado em segundo porque o initGrid vai precisar dele)
   const addWidgetToGrid = useCallback(
     (metric: MetricDefinition) => {
       if (!gridInstance.current) return;
 
-      const isFixed = metric.id === "name"; // Verifica se é a coluna fixa (Campanha)
+      const isFixed = metric.id === "name";
 
-      // Conteúdo HTML
       const contentHtml = `
       <div class="w-full h-full flex items-center justify-between px-4 py-2 rounded border 
         ${isFixed ? "border-blue-500/30 bg-blue-500/5 cursor-default" : "border-border bg-card cursor-grab active:cursor-grabbing hover:border-primary/50 hover:shadow-md"} 
@@ -96,17 +94,15 @@ export function ColumnCustomizer({
       </div>
     `;
 
-      // Cria o widget
       const widgetEl = gridInstance.current.addWidget({
         w: 1,
         h: 1,
         id: metric.id,
         noResize: true,
-        locked: isFixed, // TRAVA O ITEM SE FOR 'NAME'
-        noMove: isFixed, // IMPEDE MOVER
+        locked: isFixed,
+        noMove: isFixed,
       });
 
-      // Injeta o HTML
       if (widgetEl) {
         const contentEl = widgetEl.querySelector(".grid-stack-item-content");
         if (contentEl) {
@@ -114,7 +110,6 @@ export function ColumnCustomizer({
         }
       }
 
-      // Listeners do botão X (Apenas se não for fixo)
       if (!isFixed) {
         setTimeout(() => {
           const el = gridRef.current?.querySelector(
@@ -137,9 +132,8 @@ export function ColumnCustomizer({
       }
     },
     [handleRemove],
-  ); // <--- Dependência amarrada aqui
+  );
 
-  // 3. INICIALIZAÇÃO DO GRID (Agora ele enxerga a função addWidgetToGrid perfeitamente)
   const initGrid = useCallback(
     (itemsId: string[]) => {
       if (!gridRef.current) return;
@@ -162,7 +156,6 @@ export function ColumnCustomizer({
         gridRef.current,
       );
 
-      // Garante que 'name' seja o primeiro a ser renderizado (usando spread para não mutar o array original)
       const sortedItems = [...itemsId].sort((a, b) => {
         if (a === "name") return -1;
         if (b === "name") return 1;
@@ -175,9 +168,8 @@ export function ColumnCustomizer({
       });
     },
     [addWidgetToGrid],
-  ); // <--- Dependência amarrada aqui
+  );
 
-  // 4. GATILHO DE CICLO DE VIDA (O useEffect agora fica no final da cadeia)
   useEffect(() => {
     if (open) {
       let initialCols = [...currentColumns];
@@ -190,13 +182,11 @@ export function ColumnCustomizer({
         (id) => id !== "status" && id !== "select",
       );
 
-      // 👇 SOLUÇÃO: Micro-delay assíncrono para acalmar o Linter!
       setTimeout(() => {
         setSelectedIds(initialCols);
         setSearch("");
       }, 0);
 
-      // Aguarda a animação do modal para montar o Grid
       setTimeout(() => {
         initGrid(initialCols);
       }, 300);
@@ -208,11 +198,6 @@ export function ColumnCustomizer({
     }
   }, [open, currentColumns, initGrid]);
 
-  // ============================================================================
-  // FUNÇÕES DE AÇÃO DA INTERFACE DO USUÁRIO (Podem ficar por último)
-  // ============================================================================
-
-  // 5. TOGGLE METRIC
   const toggleMetric = (metric: MetricDefinition) => {
     const isSelected = selectedIds.includes(metric.id);
     if (isSelected) {
@@ -223,7 +208,6 @@ export function ColumnCustomizer({
     }
   };
 
-  // 6. SAVE
   const handleSave = () => {
     if (!gridInstance.current) return;
 
@@ -243,8 +227,26 @@ export function ColumnCustomizer({
     setOpen(false);
   };
 
-  // 7. FILTRO DE BUSCA (Variável de renderização pura)
-  const filteredMetrics = AVAILABLE_METRICS.filter(
+  // 🔥 LÓGICA INTELIGENTE DE FILTRAGEM DE MÉTRICAS INÚTEIS
+  const metricsToHideInUtms = [
+    "budget",
+    "bid_cap",
+    "status",
+    "cycle",
+    "card",
+    "ids",
+    "last_updated",
+    "ad_account",
+    "creation_date",
+    "delivery_status",
+  ];
+
+  const validMetrics =
+    variant === "utms"
+      ? AVAILABLE_METRICS.filter((m) => !metricsToHideInUtms.includes(m.id))
+      : AVAILABLE_METRICS;
+
+  const filteredMetrics = validMetrics.filter(
     (m) =>
       m.label.toLowerCase().includes(search.toLowerCase()) && m.id !== "name",
   );
@@ -258,11 +260,6 @@ export function ColumnCustomizer({
       </DialogTrigger>
 
       <DialogContent className="w-full md:max-w-5xl h-[800px] max-h-[90vh] flex flex-col p-0 bg-background border-border gap-0 overflow-hidden shadow-2xl">
-        {/* 🔥 CSS DO ESPAÇAMENTO REAL:
-            - bottom: 14px -> Cria o buraco visual em baixo de cada item.
-            - height: auto -> Garante que o conteúdo não estique.
-            - inset: 0 (exceto bottom) -> Alinha perfeitamente.
-        */}
         <style jsx global>{`
           .grid-stack {
             background: transparent !important;
@@ -288,7 +285,6 @@ export function ColumnCustomizer({
         </DialogHeader>
 
         <div className="flex flex-1 min-h-0 bg-background">
-          {/* ESQUERDA */}
           <div className="w-[350px] border-r border-border flex flex-col min-h-0 bg-muted/10">
             <div className="p-4 border-b border-border bg-background">
               <div className="relative">
@@ -336,7 +332,6 @@ export function ColumnCustomizer({
             </div>
           </div>
 
-          {/* DIREITA */}
           <div className="flex-1 flex flex-col min-h-0 bg-background">
             <div className="px-6 py-4 border-b border-border bg-muted/5 flex justify-between items-center h-[69px] shrink-0">
               <span className="text-xs font-bold uppercase text-muted-foreground tracking-wider flex items-center gap-2">
