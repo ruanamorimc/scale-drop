@@ -90,7 +90,7 @@ export function EffectPerCharacter({
       {letters.map((letter, index) => (
         // Passamos a className aqui para o gradiente pegar em cada letra
         <motion.span
-          variants={childVariants}
+          variants={childVariants as any}
           key={index}
           className={`inline-block whitespace-pre ${className}`}
         >
@@ -141,7 +141,7 @@ export function EffectPerWord({
       {words.map((word, index) => (
         // Passamos a className aqui para o gradiente pegar em cada palavra perfeitamente
         <motion.span
-          variants={childVariants}
+          variants={childVariants as any}
           key={index}
           className={`inline-block mr-[0.25em] ${className}`}
         >
@@ -190,7 +190,7 @@ export function EffectWithSpeed({
     >
       {words.map((word, index) => (
         <motion.span
-          variants={childVariants}
+          variants={childVariants as any}
           key={index}
           className={`inline-block mr-[0.25em] ${className}`}
         >
