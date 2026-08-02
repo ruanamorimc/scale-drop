@@ -1,5 +1,5 @@
 import prisma from "@/lib/prisma";
-import { IntegrationProvider } from "@/generated/prisma/client";
+import { IntegrationProvider } from "@prisma/client";
 
 // Tipagem do que o Mercado Livre devolve
 interface MLTokenResponse {
