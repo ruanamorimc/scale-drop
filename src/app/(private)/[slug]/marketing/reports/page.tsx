@@ -252,7 +252,7 @@ export default function ReportsPage() {
   const activeColumns = useMemo(() => {
     // Puxa as definições do columns.tsx (Que agora deve ser gerado dinamicamente!)
     const allColumnDefs = getColumns();
-    const visibleCols = [];
+    const visibleCols: typeof allColumnDefs = [];
 
     // Garantimos que DATA e DIA sempre estarão no começo da tabela (Fixas)
     const fixedStartCols = ["data", "dia"];

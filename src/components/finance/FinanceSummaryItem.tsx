@@ -4,7 +4,7 @@ import { LucideIcon } from "lucide-react";
 interface FinanceSummaryItemProps {
   label: string;
   icon?: LucideIcon;
-  value: string; // Já vem formatado "R$ 1.000,00"
+  value: string | number; // Já vem formatado "R$ 1.000,00"
   count?: number; // O número que fica tipo "31 |"
   subValue?: string; // Para porcentagens ou textos pequenos
   isNegative?: boolean;

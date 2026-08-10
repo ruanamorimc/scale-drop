@@ -8,7 +8,7 @@ import { cn } from "@/lib/utils";
 import { CARD_SIZES } from "@/constants/dashboard-layout";
 
 import { GridStack, type GridStackNode } from "gridstack";
-// @ts-expect-error - Ignora o erro de tipagem pois o Next.js gerencia o CSS perfeitamente
+// @ts-ignore
 import "gridstack/dist/gridstack.css";
 
 // 🔥 IMPORT DOS ELEMENTOS DO SHADCN PARA O NOSSO NOVO SELECT

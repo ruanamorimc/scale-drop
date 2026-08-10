@@ -18,7 +18,7 @@ import { AVAILABLE_METRICS, MetricDefinition } from "@/constants/meta-metrics";
 
 // GRIDSTACK IMPORTS
 import { GridStack, GridStackElement } from "gridstack";
-// @ts-expect-error - Ignora o erro de tipagem pois o Next.js gerencia o CSS perfeitamente
+// @ts-ignore
 import "gridstack/dist/gridstack.css";
 
 interface ColumnCustomizerProps {

@@ -105,8 +105,8 @@ export default function AccumulatedMetricsChart({
               }}
               content={
                 <ChartTooltipContent
-                  className="w-[200px]"
-                  formatter={(value: string | number, name: string) => {
+                  className="w-50"
+                  formatter={(value, name) => {
                     const numericValue = Number(value);
 
                     // 🔥 PONTO 2: Pegando a cor real do chartConfig dinamicamente!

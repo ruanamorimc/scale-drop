@@ -149,50 +149,45 @@ export default function HelpPage() {
 
             {/* Lista de Itens */}
             <div className="divide-y divide-white/5">
-              {TUTORIAL_CATEGORIES.map((item) => (
-                <div
-                  key={item.id}
-                  className="p-5 flex items-center gap-5 hover:bg-white/[0.02] transition-colors group cursor-pointer"
-                  onClick={() => setSelectedTutorial(item)}
-                >
-                  {/* LOGO NO CARD (Permanece a mesma) */}
-                  <div className="h-12 w-12 rounded-xl bg-zinc-900 border border-white/5 flex items-center justify-center shrink-0 p-2 shadow-sm">
-                    {item.logoUrl ? (
-                      <Image
-                        src={item.logoUrl}
-                        alt={item.title}
-                        width={32}
-                        height={32}
-                        className="object-contain w-full h-full"
-                      />
-                    ) : (
-                      <item.icon className="text-white" size={20} />
-                    )}
-                  </div>
+              {TUTORIAL_CATEGORIES.map((item) => {
+                // 1. Avisamos ao TypeScript que o ícone é um elemento React válido
+                const Icon = item.icon as React.ElementType;
 
-                  {/* TEXTOS */}
-                  <div className="flex flex-col">
-                    <h4 className="text-base font-semibold text-foreground group-hover:text-blue-400 transition-colors">
-                      {item.title}
-                    </h4>
-                    <p className="text-xs text-muted-foreground mt-0.5">
-                      {item.subtitle}
-                    </p>
-                  </div>
+                return (
+                  <div
+                    key={item.id}
+                    // 2. Trocamos o [0.02] por /2 para limpar o aviso amarelo do Tailwind
+                    className="p-5 flex items-center gap-5 hover:bg-white/2 transition-colors group cursor-pointer"
+                    // 3. Agora passamos o 'item' inteiro e intacto, matando o erro!
+                    onClick={() => setSelectedTutorial(item)}
+                  >
+                    {/* LOGO NO CARD */}
+                    <div className="h-12 w-12 rounded-xl bg-zinc-900 border border-white/5 flex items-center justify-center shrink-0 p-2 shadow-sm">
+                      {item.logoUrl ? (
+                        <Image
+                          src={item.logoUrl}
+                          alt={item.title}
+                          width={32}
+                          height={32}
+                          className="object-contain w-full h-full"
+                        />
+                      ) : (
+                        <Icon className="text-white" size={20} />
+                      )}
+                    </div>
 
-                  {/* BOTÃO */}
-                  <div className="ml-auto">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      className="bg-zinc-900 border border-white/10 hover:bg-blue-600 hover:text-white hover:border-blue-500/50 transition-all text-xs h-8 font-medium gap-2"
-                    >
-                      Ver tutoriais
-                      <ChevronRight size={14} className="opacity-50" />
-                    </Button>
+                    {/* TEXTOS */}
+                    <div className="flex flex-col">
+                      <h4 className="text-base font-semibold text-foreground group-hover:text-blue-400 transition-colors">
+                        {item.title}
+                      </h4>
+                      <p className="text-xs text-muted-foreground mt-0.5">
+                        {item.subtitle}
+                      </p>
+                    </div>
                   </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </PremiumCard>
         </div>
@@ -219,55 +214,63 @@ export default function HelpPage() {
 
             {/* Lista de Suporte */}
             <div className="divide-y divide-white/5">
-              {SUPPORT_CHANNELS.map((item) => (
-                <div
-                  key={item.id}
-                  className="p-5 flex items-center gap-4 hover:bg-white/[0.02] transition-colors"
-                >
-                  {/* ÍCONE OU LOGO (WhatsApp maior) */}
+              {SUPPORT_CHANNELS.map((item) => {
+                // 1. Avisamos ao TypeScript que ambos são componentes React válidos
+                const Icon = item.icon as React.ElementType;
+                const ActionIcon = item.actionIcon as React.ElementType;
+
+                return (
                   <div
-                    className={cn(
-                      "rounded-lg flex items-center justify-center shrink-0 overflow-hidden",
-                      item.isWhatsapp ? "h-11 w-11" : "h-10 w-10",
-                      item.bgClass,
-                      item.colorClass,
-                    )}
+                    key={item.id}
+                    // 2. Corrigimos o aviso amarelo do Tailwind trocando [0.02] por /2
+                    className="p-5 flex items-center gap-4 hover:bg-white/2 transition-colors"
                   >
-                    {item.logoUrl ? (
-                      <Image
-                        src={item.logoUrl}
-                        alt={item.title}
-                        width={40}
-                        height={40}
-                        className="object-contain"
-                      />
-                    ) : (
-                      <item.icon className="text-white" size={20} />
-                    )}
-                  </div>
+                    {/* ÍCONE OU LOGO (WhatsApp maior) */}
+                    <div
+                      className={cn(
+                        "rounded-lg flex items-center justify-center shrink-0 overflow-hidden",
+                        item.isWhatsapp ? "h-11 w-11" : "h-10 w-10",
+                        item.bgClass,
+                        item.colorClass,
+                      )}
+                    >
+                      {item.logoUrl ? (
+                        <Image
+                          src={item.logoUrl}
+                          alt={item.title}
+                          width={40}
+                          height={40}
+                          className="object-contain"
+                        />
+                      ) : (
+                        <Icon className="text-white" size={20} />
+                      )}
+                    </div>
 
-                  {/* TEXTOS */}
-                  <div className="flex flex-col min-w-0 mr-2">
-                    <h4 className="text-sm font-semibold text-foreground truncate">
-                      {item.title}
-                    </h4>
-                    <p className="text-[11px] text-muted-foreground truncate mt-0.5">
-                      {item.subtitle}
-                    </p>
-                  </div>
+                    {/* TEXTOS */}
+                    <div className="flex flex-col min-w-0 mr-2">
+                      <h4 className="text-sm font-semibold text-foreground truncate">
+                        {item.title}
+                      </h4>
+                      <p className="text-[11px] text-muted-foreground truncate mt-0.5">
+                        {item.subtitle}
+                      </p>
+                    </div>
 
-                  {/* BOTÃO COM ÍCONE */}
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="ml-auto shrink-0 h-8 text-[10px] border-white/10 bg-transparent hover:bg-white/5 px-3 gap-2"
-                    onClick={() => window.open(item.link, "_blank")}
-                  >
-                    <item.actionIcon size={12} />
-                    {item.actionText}
-                  </Button>
-                </div>
-              ))}
+                    {/* BOTÃO COM ÍCONE */}
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="ml-auto shrink-0 h-8 text-[10px] border-white/10 bg-transparent hover:bg-white/5 px-3 gap-2"
+                      onClick={() => window.open(item.link, "_blank")}
+                    >
+                      {/* 4. Chamamos a variável com letra maiúscula para o ícone do botão */}
+                      <ActionIcon size={12} />
+                      {item.actionText}
+                    </Button>
+                  </div>
+                );
+              })}
             </div>
           </PremiumCard>
 
@@ -302,7 +305,10 @@ export default function HelpPage() {
                     />
                   ) : (
                     // Fallback se não tiver imagem
-                    <selectedTutorial.icon className="text-white" size={28} />
+                    (() => {
+                      const Icon = selectedTutorial.icon as React.ElementType;
+                      return <Icon className="text-white" size={28} />;
+                    })()
                   )}
                 </div>
               )}
@@ -318,7 +324,7 @@ export default function HelpPage() {
             </div>
           </DialogHeader>
 
-          <ScrollArea className="max-h-[500px] p-2">
+          <ScrollArea className="max-h-125 p-2">
             <div className="flex flex-col gap-1 p-2">
               {selectedTutorial?.lessons.map((lesson, idx) => (
                 <div

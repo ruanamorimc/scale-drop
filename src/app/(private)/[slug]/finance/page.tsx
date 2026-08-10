@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useCallback } from "react";
+import { useParams } from "next/navigation";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/data-table/DataTable";
 import {
@@ -54,14 +55,58 @@ import {
 import { PremiumCard } from "@/components/cards/PremiumCard";
 import { cn } from "@/lib/utils";
 
+// --- INTERFACES PARA MATAR O "ANY" ---
+interface HeaderIconProps {
+  icon: React.ElementType;
+  colorClass?: string;
+}
+
+interface MetricRowProps {
+  icon?: React.ElementType;
+  label: string;
+  value: number | string;
+  count?: number;
+  className?: string;
+  isNegative?: boolean;
+  iconColor?: string;
+  isCurrency?: boolean;
+}
+
+// 1. CRIAMOS O CONTRATO EXATO DO QUE A SUA TELA PRECISA LER
+interface FinanceData {
+  totalPaid: number;
+  countPaid: number;
+  totalGenerated: number;
+  countGenerated: number;
+  totalPending: number;
+  countPending: number;
+  cardPaidValue: number;
+  cardPaidCount: number;
+  boletoPaidValue: number;
+  boletoPaidCount: number;
+  pixPaidValue: number;
+  pixPaidCount: number;
+  netProfit: number;
+  roi: number;
+  margin: number;
+  adSpend: number;
+  totalCostOfGoods: number;
+  totalGatewayFees: number;
+  totalTaxAmount: number;
+  totalFixedExpenses: number;
+  ticketAverage: number;
+  totalShipping: number;
+  totalDiscounts: number;
+  abandonedCount: number;
+  abandonedValue: number;
+  fixedExpensesList: Record<string, unknown>[];
+}
+
 // --- ÍCONE GRANDE DO CABEÇALHO ---
 const HeaderIcon = ({
   icon: Icon,
   colorClass = "text-blue-500",
-}: {
-  icon: any;
-  colorClass?: string;
-}) => (
+}: HeaderIconProps) => (
   <div className="relative flex items-center justify-center">
     <div className="p-1 rounded-full bg-gray-100 dark:bg-gray-800/50">
       <div
@@ -82,8 +127,8 @@ const MetricRow = ({
   className,
   isNegative,
   iconColor = "text-white",
-}: any) => {
-  // Função auxiliar de formatação dentro do componente ou passada via prop
+  isCurrency = true,
+}: MetricRowProps) => {
   const fmt = (v: number) =>
     v?.toLocaleString("pt-BR", { style: "currency", currency: "BRL" }) ||
     "R$ 0,00";
@@ -115,7 +160,7 @@ const MetricRow = ({
           )}
         >
           {isNegative ? "- " : ""}
-          {typeof value === "number" ? fmt(value) : value}
+          {typeof value === "number" && isCurrency ? fmt(value) : value}
         </span>
         {count !== undefined && (
           <span className="text-[10px] text-muted-foreground block">
@@ -128,36 +173,45 @@ const MetricRow = ({
 };
 
 export default function FinanceOverviewPage() {
-  const [data, setData] = useState<any>(null);
+  const params = useParams();
+  const workspaceId = params.slug as string; // Captura o ID da loja/workspace da URL
+  // 2. APLICAMOS A INTERFACE AQUI
+  const [data, setData] = useState<FinanceData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  // Filtro de Data
   const [dateRange, setDateRange] = useState<DateRange | undefined>({
     from: subDays(new Date(), 30),
     to: new Date(),
   });
 
-  // Estados de Despesas
   const [isExpenseSheetOpen, setIsExpenseSheetOpen] = useState(false);
-  const [editingExpense, setEditingExpense] = useState<any>(null);
-  const [deletingExpense, setDeletingExpense] = useState<any>(null);
+  const [editingExpense, setEditingExpense] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
+  const [deletingExpense, setDeletingExpense] = useState<Record<
+    string,
+    unknown
+  > | null>(null);
 
-  // Paginação das Despesas
-  const [expensePage, setExpensePage] = useState(1);
-  const ITEMS_PER_PAGE = 5;
-
-  const load = async () => {
+  const load = useCallback(async () => {
     setIsLoading(true);
-    const metrics = await getFinanceMetrics(dateRange?.from, dateRange?.to);
-    setData(metrics);
+    const metrics = await getFinanceMetrics(
+      workspaceId,
+      dateRange?.from,
+      dateRange?.to
+    );
+    setData(metrics as unknown as FinanceData);
     setIsLoading(false);
-  };
+  }, [dateRange, workspaceId]);
 
   useEffect(() => {
     load();
-  }, [dateRange]);
+  }, [load]);
 
-  const handleSaveExpense = async (formData: any) => {
+  const handleSaveExpense = async (
+    formData: Parameters<typeof saveFixedExpense>[0],
+  ) => {
     const res = await saveFixedExpense(formData);
     if (res.success) {
       toast.success("Despesa salva");
@@ -167,7 +221,7 @@ export default function FinanceOverviewPage() {
   };
 
   const handleDeleteExpense = async () => {
-    if (!deletingExpense) return;
+    if (!deletingExpense || typeof deletingExpense.id !== "string") return;
     await deleteFixedExpense(deletingExpense.id);
     setDeletingExpense(null);
     load();
@@ -187,32 +241,26 @@ export default function FinanceOverviewPage() {
   const handleExportDRE = () => {
     if (!data) return toast.error("Sem dados para exportar.");
 
-    // 1. Estrutura da DRE (Linha a Linha)
-    // Usamos ponto e vírgula (;) como separador para o Excel brasileiro reconhecer colunas automaticamente
     const csvRows = [
       ["DRE - DEMONSTRAÇÃO DO RESULTADO DO EXERCÍCIO"],
       [
         `Período: ${dateRange?.from?.toLocaleDateString()} a ${dateRange?.to?.toLocaleDateString()}`,
       ],
-      [""], // Linha em branco
-      ["DESCRIÇÃO", "VALOR", "ANÁLISE VERTICAL (%)"], // Cabeçalho
-
-      // RECEITA
+      [""],
+      ["DESCRIÇÃO", "VALOR", "ANÁLISE VERTICAL (%)"],
       ["(+) Receita Bruta (Pedidos Pagos)", fmt(data.totalPaid), "100%"],
       [
         "(-) Descontos",
         fmt(data.totalDiscounts),
         ((data.totalDiscounts / data.totalPaid) * 100).toFixed(2) + "%",
       ],
-      ["(-) Cancelamentos/Reembolsos", fmt(0), "0.00%"], // Ajuste se tiver o dado real
+      ["(-) Cancelamentos/Reembolsos", fmt(0), "0.00%"],
       [
         "(=) RECEITA LÍQUIDA",
         fmt(data.totalPaid - data.totalDiscounts),
         "100%",
       ],
       [""],
-
-      // CUSTOS VARIÁVEIS
       [
         "(-) Custo do Produto (CMV)",
         fmt(data.totalCostOfGoods),
@@ -235,12 +283,24 @@ export default function FinanceOverviewPage() {
       ],
       [
         "(=) MARGEM DE CONTRIBUIÇÃO",
-        fmt(contributionMarginVal),
-        (contributionMarginPercent * 100).toFixed(2) + "%",
+        fmt(
+          (data.totalPaid || 0) -
+            ((data.totalCostOfGoods || 0) +
+              (data.totalGatewayFees || 0) +
+              (data.totalTaxAmount || 0) +
+              (data.adSpend || 0)),
+        ),
+        (
+          (((data.totalPaid || 0) -
+            ((data.totalCostOfGoods || 0) +
+              (data.totalGatewayFees || 0) +
+              (data.totalTaxAmount || 0) +
+              (data.adSpend || 0))) /
+            (data.totalPaid || 1)) *
+          100
+        ).toFixed(2) + "%",
       ],
       [""],
-
-      // DESPESAS
       [
         "(-) Marketing (Ads)",
         fmt(data.adSpend),
@@ -248,25 +308,22 @@ export default function FinanceOverviewPage() {
       ],
       [
         "(-) Despesas Fixas Operacionais",
-        fmt(fixedCosts),
-        ((fixedCosts / data.totalPaid) * 100).toFixed(2) + "%",
+        fmt(data.totalFixedExpenses || 0),
+        (((data.totalFixedExpenses || 0) / data.totalPaid) * 100).toFixed(2) +
+          "%",
       ],
       [""],
-
-      // RESULTADO FINAL
       [
         "(=) LUCRO LÍQUIDO (EBITDA)",
         fmt(data.netProfit),
-        data.margin.toFixed(2) + "%",
+        (data.margin || 0).toFixed(2) + "%",
       ],
     ];
 
-    // 2. Converter Array para CSV String
     const csvContent =
-      "data:text/csv;charset=utf-8,\uFEFF" + // \uFEFF adiciona o BOM para acentos funcionarem no Excel
+      "data:text/csv;charset=utf-8,\uFEFF" +
       csvRows.map((e) => e.join(";")).join("\n");
 
-    // 3. Criar Link de Download e Clicar
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement("a");
     link.setAttribute("href", encodedUri);
@@ -281,43 +338,34 @@ export default function FinanceOverviewPage() {
     toast.success("DRE exportada com sucesso!");
   };
 
-  // --- CÁLCULOS REAIS ---
-  const variableCosts =
-    (data?.totalCostOfGoods || 0) +
-    (data?.totalGatewayFees || 0) +
-    (data?.totalTaxAmount || 0) +
-    (data?.adSpend || 0);
-  const contributionMarginVal = (data?.totalPaid || 0) - variableCosts;
-  const contributionMarginPercent =
-    data?.totalPaid > 0 ? contributionMarginVal / data.totalPaid : 0;
-
-  const fixedCosts = data?.totalFixedExpenses || 0;
-  const breakEvenPoint =
-    contributionMarginPercent > 0 ? fixedCosts / contributionMarginPercent : 0;
-  const breakEvenProgress =
-    breakEvenPoint > 0
-      ? (data?.totalPaid / breakEvenPoint) * 100
-      : fixedCosts === 0
-        ? 100
-        : 0;
-  if (!data)
+  if (isLoading || !data)
     return (
       <div className="p-8 flex items-center justify-center h-screen">
         <Loader2 className="animate-spin text-blue-500" />
       </div>
     );
 
-  // Paginação Lógica
-  const expensesList = data.fixedExpensesList || [];
-  const totalPages = Math.ceil(expensesList.length / ITEMS_PER_PAGE);
-  const paginatedExpenses = expensesList.slice(
-    (expensePage - 1) * ITEMS_PER_PAGE,
-    expensePage * ITEMS_PER_PAGE,
-  );
+  const variableCosts =
+    (data.totalCostOfGoods || 0) +
+    (data.totalGatewayFees || 0) +
+    (data.totalTaxAmount || 0) +
+    (data.adSpend || 0);
+  const contributionMarginVal = (data.totalPaid || 0) - variableCosts;
+  const contributionMarginPercent =
+    data.totalPaid > 0 ? contributionMarginVal / data.totalPaid : 0;
+
+  const fixedCosts = data.totalFixedExpenses || 0;
+  const breakEvenPoint =
+    contributionMarginPercent > 0 ? fixedCosts / contributionMarginPercent : 0;
+  const breakEvenProgress =
+    breakEvenPoint > 0
+      ? (data.totalPaid / breakEvenPoint) * 100
+      : fixedCosts === 0
+        ? 100
+        : 0;
 
   return (
     <div className="flex-1 space-y-6 p-8 pt-6">
-      {/* HEADER */}
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h2 className="text-3xl font-bold tracking-tight">Visão Geral</h2>
@@ -327,9 +375,7 @@ export default function FinanceOverviewPage() {
         </div>
 
         <div className="flex items-center gap-2 w-full md:w-auto">
-          {/* SEU DATA PICKER ORIGINAL */}
           <DatePickerWithRange date={dateRange} setDate={setDateRange} />
-
           <Button variant="outline" className="gap-2" onClick={handleExportDRE}>
             <Download size={16} />{" "}
             <span className="hidden sm:inline">Exportar DRE</span>
@@ -337,9 +383,7 @@ export default function FinanceOverviewPage() {
         </div>
       </div>
 
-      {/* GRID DE CARDS SUPERIORES */}
       <div className="grid gap-6 grid-cols-1 md:grid-cols-2 lg:grid-cols-3">
-        {/* CARD 1: PEDIDOS PAGOS */}
         <PremiumCard>
           <div className="p-6">
             <div className="flex items-center justify-between mb-6 pb-4 border-b border-border/40 dark:border-white/5">
@@ -362,7 +406,6 @@ export default function FinanceOverviewPage() {
             </div>
 
             <div className="space-y-1">
-              {/* LISTA EXATA QUE VOCÊ PEDIU */}
               <MetricRow
                 icon={LayoutDashboard}
                 label="Pedidos Gerados"
@@ -416,7 +459,6 @@ export default function FinanceOverviewPage() {
           </div>
         </PremiumCard>
 
-        {/* CARD 2: LUCRO LÍQUIDO */}
         <PremiumCard>
           <div className="p-6">
             <div className="flex items-center justify-between mb-6 pb-4 border-b border-border/40 dark:border-white/5">
@@ -441,30 +483,26 @@ export default function FinanceOverviewPage() {
             </div>
 
             <div className="space-y-1">
-              {/* ROI e MARGEM voltaram para a lista como pedido */}
               <MetricRow
                 icon={TrendingUp}
                 label="ROI"
-                value={`${data.roi.toFixed(0)}%`}
+                value={`${(data.roi || 0).toFixed(0)}%`}
                 isCurrency={false}
               />
               <MetricRow
                 icon={TicketPercent}
                 label="Margem"
-                value={`${data.margin.toFixed(1)}%`}
+                value={`${(data.margin || 0).toFixed(1)}%`}
                 isCurrency={false}
               />
-
               <MetricRow
                 icon={Crown}
                 label="CPA Real"
                 value={fmt(
-                  data.countPaid > 0 ? data.adSpend / data.countPaid : 0,
+                  data.countPaid > 0 ? (data.adSpend || 0) / data.countPaid : 0,
                 )}
               />
 
-              {/* ADS COM TOOLTIP (Mantendo sua funcionalidade) */}
-              {/* ADS COM TOOLTIP CORRIGIDO */}
               <TooltipProvider>
                 <Tooltip delayDuration={0}>
                   <TooltipTrigger asChild>
@@ -475,13 +513,12 @@ export default function FinanceOverviewPage() {
                             <Megaphone size={14} className="text-white" />
                           </div>
                         </div>
-
                         <span className="text-sm text-muted-foreground font-medium group-hover:text-foreground">
                           Marketing (Ads)
                         </span>
                       </div>
                       <span className="text-sm font-semibold text-red-600 dark:text-red-400">
-                        - {fmt(data.adSpend)}
+                        - {fmt(data.adSpend || 0)}
                       </span>
                     </div>
                   </TooltipTrigger>
@@ -489,11 +526,9 @@ export default function FinanceOverviewPage() {
                     <p className="text-xs font-bold mb-2 text-foreground">
                       Detalhamento Ads
                     </p>
-
-                    {/* AQUI ESTÁ A CORREÇÃO: list-disc + pl-3 */}
                     <ul className="text-xs space-y-1 list-disc pl-3 text-muted-foreground">
-                      <li>Facebook: {fmt(data.adSpend * 0.8)} (Est.)</li>
-                      <li>Google: {fmt(data.adSpend * 0.2)} (Est.)</li>
+                      <li>Facebook: {fmt((data.adSpend || 0) * 0.8)} (Est.)</li>
+                      <li>Google: {fmt((data.adSpend || 0) * 0.2)} (Est.)</li>
                     </ul>
                   </TooltipContent>
                 </Tooltip>
@@ -502,20 +537,20 @@ export default function FinanceOverviewPage() {
               <MetricRow
                 icon={Package}
                 label="Custo Produtos"
-                value={data.totalCostOfGoods}
+                value={data.totalCostOfGoods || 0}
                 isNegative
               />
               <MetricRow
                 icon={Wallet}
                 label="Gateway + Taxas"
-                value={data.totalGatewayFees}
+                value={data.totalGatewayFees || 0}
                 isNegative
               />
               <MetricRow icon={Store} label="Checkout" value={0} isNegative />
               <MetricRow
                 icon={Scale}
                 label="Impostos"
-                value={data.totalTaxAmount}
+                value={data.totalTaxAmount || 0}
                 isNegative
               />
               <MetricRow
@@ -529,7 +564,6 @@ export default function FinanceOverviewPage() {
           </div>
         </PremiumCard>
 
-        {/* CARD 3: TICKET MÉDIO */}
         <PremiumCard>
           <div className="p-6">
             <div className="flex items-center justify-between mb-6 pb-4 border-b border-border/40 dark:border-white/5">
@@ -540,25 +574,22 @@ export default function FinanceOverviewPage() {
                     Ticket Médio
                   </span>
                   <span className="text-2xl font-bold text-foreground">
-                    {fmt(data.ticketAverage)}
+                    {fmt(data.ticketAverage || 0)}
                   </span>
                 </div>
               </div>
-              {/* <span className="text-[10px] font-bold bg-emerald-500/10 text-emerald-500 px-2 py-1 rounded">
-                SAUDÁVEL
-              </span> */}
             </div>
 
             <div className="space-y-1">
               <MetricRow
                 icon={Truck}
                 label="Frete"
-                value={data.totalShipping}
+                value={data.totalShipping || 0}
               />
               <MetricRow
                 icon={Tags}
                 label="Descontos"
-                value={data.totalDiscounts}
+                value={data.totalDiscounts || 0}
                 isNegative
               />
               <MetricRow
@@ -587,9 +618,7 @@ export default function FinanceOverviewPage() {
         </PremiumCard>
       </div>
 
-      {/* GRID INFERIOR */}
       <div className="grid gap-6 grid-cols-1 lg:grid-cols-3">
-        {/* TABELA DE DESPESAS */}
         <div className="lg:col-span-2">
           <PremiumCard>
             <div className="p-0">
@@ -619,15 +648,15 @@ export default function FinanceOverviewPage() {
 
               <div className="p-4">
                 <DataTable
-                  columns={columns}
+                  columns={columns as never}
                   data={data.fixedExpensesList || []}
-                  pageSize={6} // <--- AQUI ESTÁ A MÁGICA (Só nesta página)
+                  pageSize={6}
                   meta={{
-                    onEdit: (exp: any) => {
+                    onEdit: (exp: Record<string, unknown>) => {
                       setEditingExpense(exp);
                       setIsExpenseSheetOpen(true);
                     },
-                    onDelete: (exp: any) => {
+                    onDelete: (exp: Record<string, unknown>) => {
                       setDeletingExpense(exp);
                     },
                   }}
@@ -637,7 +666,6 @@ export default function FinanceOverviewPage() {
           </PremiumCard>
         </div>
 
-        {/* SAÚDE DA OPERAÇÃO */}
         <div className="xl:col-span-1 h-full">
           <PremiumCard className="h-full">
             <div className="p-6 flex flex-col h-full">
@@ -682,7 +710,7 @@ export default function FinanceOverviewPage() {
                   </span>
                   <p className="text-2xl font-bold mt-1 text-foreground">
                     {data.countPaid > 0
-                      ? fmt(data.adSpend / data.countPaid)
+                      ? fmt((data.adSpend || 0) / data.countPaid)
                       : "R$ 0,00"}
                   </p>
                   <p className="text-[10px] text-muted-foreground mt-1">

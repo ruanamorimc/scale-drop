@@ -43,9 +43,9 @@ export function ProfileForm({ user }: ProfileFormProps) {
   const form = useForm<UpdateUserValues>({
     resolver: zodResolver(updateUserSchema),
     defaultValues: {
-      name: user?.name || "",
+      username: user?.name || "",
       email: user?.email || "",
-      phoneNumber: user?.phoneNumber || "",
+      phone: user?.phoneNumber || "",
     },
   });
 
@@ -53,9 +53,9 @@ export function ProfileForm({ user }: ProfileFormProps) {
   useEffect(() => {
     if (user) {
       form.reset({
-        name: user.name || "",
+        username: user.name || "",
         email: user.email || "",
-        phoneNumber: user.phoneNumber || "",
+        phone: user.phoneNumber || "",
       });
     }
   }, [user, form]);

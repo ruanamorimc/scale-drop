@@ -4,8 +4,15 @@ import { ReactNode, useState, useEffect, useRef } from "react";
 import Image from "next/image";
 import createGlobe from "cobe";
 import { motion, AnimatePresence } from "motion/react";
+import { Transition } from "framer-motion";
 import { cn } from "@/lib/utils";
 import { Server } from "lucide-react";
+import logoYampi from "../../public/logos/yampi.svg";
+import logoAppmax from "../../public/logos/appmax.png";
+import logoShopify from "../../public/logos/shopify.svg";
+import logoMeta from "../../public/logos/meta.png";
+import logoGoogle from "../../public/logos/google-ads.svg";
+import logoTiktok from "../../public/logos/tiktok.svg";
 
 // =========================================================
 // INTERFACE E COMPONENTE MASTER DE CARD (BentoGridCard)
@@ -76,7 +83,21 @@ function BentoGridCard({
 // 6 COMPONENTES DE ANIMAÇÃO DE ÍCONE
 // =========================================================
 
-const springTransition = { type: "spring", stiffness: 200, damping: 20 };
+const springTransition: Transition = {
+  type: "spring",
+  stiffness: 200,
+  damping: 20,
+};
+
+const orbitSlowHover: Transition = {
+  duration: 12,
+  repeat: Infinity,
+  ease: "linear",
+};
+
+const resetTransition: Transition = {
+  duration: 0.3,
+};
 
 // 1. Hub de Integrações
 const HubIntegrationAnimation = ({ isHovered }: { isHovered: boolean }) => {
@@ -93,9 +114,11 @@ const HubIntegrationAnimation = ({ isHovered }: { isHovered: boolean }) => {
         transition={springTransition}
         className="absolute left-24 sm:left-24 z-10 flex size-20 sm:size-24 shrink-0 items-center justify-center rounded-3xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#141414] p-4 shadow-xl"
       >
-        <img
-          src="/logos/shopify.svg"
+        <Image
+          src={logoShopify}
           alt="Shopify"
+          width={40}
+          height={40}
           className="h-full w-full object-contain opacity-60 transition-opacity duration-500 group-hover:opacity-100"
         />
       </motion.div>
@@ -109,9 +132,11 @@ const HubIntegrationAnimation = ({ isHovered }: { isHovered: boolean }) => {
         transition={springTransition}
         className="absolute right-24 sm:right-24 z-10 flex size-20 sm:size-24 shrink-0 items-center justify-center rounded-3xl border border-zinc-200 dark:border-white/10 bg-white dark:bg-[#141414] p-4 shadow-xl"
       >
-        <img
-          src="/logos/yampi.svg"
+        <Image
+          src={logoYampi}
           alt="Yampi"
+          width={40}
+          height={40}
           className="h-full w-full object-contain opacity-60 transition-opacity duration-500 group-hover:opacity-100"
         />
       </motion.div>
@@ -155,13 +180,6 @@ const HubIntegrationAnimation = ({ isHovered }: { isHovered: boolean }) => {
 // 2. Atribuição Impecável (Sistema Solar - Bug do Loop Resolvido)
 // =========================================================
 const AttributionAnimation = ({ isHovered }: { isHovered: boolean }) => {
-  // Transições de Loop (Apenas quando o mouse está em cima)
-  const orbitHover = { duration: 8, repeat: Infinity, ease: "linear" };
-  const orbitSlowHover = { duration: 12, repeat: Infinity, ease: "linear" };
-
-  // Transição de Retorno (Quando o mouse sai, volta para a posição original suavemente sem repetir)
-  const resetTransition = { type: "spring", stiffness: 100, damping: 20 };
-
   return (
     <div className="relative flex items-center justify-center w-full h-full overflow-hidden">
       {/* Anéis do Radar reduzidos */}
@@ -177,34 +195,46 @@ const AttributionAnimation = ({ isHovered }: { isHovered: boolean }) => {
       {/* ================= ÓRBITA INTERNA (130px) ================= */}
       <motion.div
         animate={isHovered ? { rotate: [0, 360] } : { rotate: 0 }}
-        transition={isHovered ? orbitHover : resetTransition} // 🔥 Condicional aplicada aqui
+        transition={isHovered ? orbitSlowHover : resetTransition}
         className="absolute z-10 w-[130px] h-[130px]"
       >
         {/* Shopify - Topo */}
         <motion.div
           animate={isHovered ? { rotate: [0, -360] } : { rotate: 0 }}
-          transition={isHovered ? orbitHover : resetTransition} // 🔥 Condicional aplicada aqui
+          transition={isHovered ? orbitSlowHover : resetTransition}
           className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2 flex size-6 items-center justify-center rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 shadow-[0_0_12px_rgba(150,191,72,0.5)]"
         >
-          <img src="/logos/shopify.svg" alt="Shopify" className="size-3" />
+          <Image
+            src={logoShopify}
+            alt="Shopify"
+            width={12}
+            height={12}
+            className="object-contain"
+          />
         </motion.div>
 
         {/* Meta - Inferior Direito */}
         <motion.div
           animate={isHovered ? { rotate: [0, -360] } : { rotate: 0 }}
-          transition={isHovered ? orbitHover : resetTransition}
+          transition={isHovered ? orbitSlowHover : resetTransition}
           className="absolute bottom-[15%] right-[15%] translate-x-1/2 translate-y-1/2 flex size-6 items-center justify-center rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 shadow-[0_0_12px_rgba(24,119,242,0.5)]"
         >
-          <img src="/logos/facebook.svg" alt="Meta" className="size-3" />
+          <Image
+            src={logoMeta}
+            alt="Meta"
+            width={24}
+            height={24}
+            className="object-contain"
+          />
         </motion.div>
 
         {/* Yampi - Inferior Esquerdo */}
         <motion.div
           animate={isHovered ? { rotate: [0, -360] } : { rotate: 0 }}
-          transition={isHovered ? orbitHover : resetTransition}
+          transition={isHovered ? orbitSlowHover : resetTransition}
           className="absolute bottom-[15%] left-[15%] -translate-x-1/2 translate-y-1/2 flex size-6 items-center justify-center rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 shadow-[0_0_12px_rgba(224,43,125,0.5)]"
         >
-          <img src="/logos/yampi.svg" alt="Yampi" className="size-3" />
+          <Image src={logoYampi} alt="Yampi" className="size-3" />
         </motion.div>
       </motion.div>
 
@@ -220,7 +250,7 @@ const AttributionAnimation = ({ isHovered }: { isHovered: boolean }) => {
           transition={isHovered ? orbitSlowHover : resetTransition}
           className="absolute bottom-0 left-1/2 -translate-x-1/2 translate-y-1/2 flex size-7 items-center justify-center rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 shadow-[0_0_12px_rgba(32,178,170,0.5)]"
         >
-          <img src="/logos/appmax.png" alt="Appmax" className="size-4" />
+          <Image src={logoAppmax} alt="Appmax" className="size-4" />
         </motion.div>
 
         {/* Google Ads - Superior Esquerdo */}
@@ -229,11 +259,7 @@ const AttributionAnimation = ({ isHovered }: { isHovered: boolean }) => {
           transition={isHovered ? orbitSlowHover : resetTransition}
           className="absolute top-[15%] left-[15%] -translate-x-1/2 -translate-y-1/2 flex size-7 items-center justify-center rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 shadow-[0_0_12px_rgba(66,133,244,0.5)]"
         >
-          <img
-            src="/logos/google-ads.svg"
-            alt="Google Ads"
-            className="size-4"
-          />
+          <Image src={logoGoogle} alt="Google Ads" className="size-4" />
         </motion.div>
 
         {/* TikTok - Superior Direito */}
@@ -242,7 +268,7 @@ const AttributionAnimation = ({ isHovered }: { isHovered: boolean }) => {
           transition={isHovered ? orbitSlowHover : resetTransition}
           className="absolute top-[15%] right-[15%] translate-x-1/2 -translate-y-1/2 flex size-7 items-center justify-center rounded-full bg-white dark:bg-zinc-900 border border-zinc-200 dark:border-white/10 shadow-[0_0_12px_rgba(255,0,80,0.5)]"
         >
-          <img src="/logos/tiktok.svg" alt="TikTok" className="size-4" />
+          <Image src={logoTiktok} alt="TikTok" className="size-4" />
         </motion.div>
       </motion.div>
     </div>
@@ -265,13 +291,15 @@ const ProfitAnimation = ({ isHovered }: { isHovered: boolean }) => {
   const svgFillPath = `${svgLinePath} L 410 200 L 0 200 Z`;
 
   useEffect(() => {
+    // 1. Se não estiver em Hover, define o valor inicial e encerra o efeito aqui
     if (!isHovered) {
       setProfit("6.424");
       return;
     }
 
-    let startTime = Date.now();
-    let animationFrame: number;
+    // 2. Variáveis de controle criadas de forma limpa dentro do efeito
+    const startTime = Date.now();
+    let animationFrameId: number;
 
     const updateCounter = () => {
       const now = Date.now();
@@ -281,12 +309,17 @@ const ProfitAnimation = ({ isHovered }: { isHovered: boolean }) => {
       const currentVal = 6424 + progress * (15890 - 6424);
       setProfit(Math.floor(currentVal).toLocaleString("pt-BR"));
 
-      animationFrame = requestAnimationFrame(updateCounter);
+      animationFrameId = requestAnimationFrame(updateCounter);
     };
 
-    animationFrame = requestAnimationFrame(updateCounter);
-    return () => cancelAnimationFrame(animationFrame);
-  }, [isHovered]);
+    // 3. Inicia a animação de contagem
+    animationFrameId = requestAnimationFrame(updateCounter);
+
+    // 4. Função de limpeza obrigatória do React para cancelar a animação
+    return () => {
+      cancelAnimationFrame(animationFrameId);
+    };
+  }, [isHovered]); // O efeito só roda quando "isHovered" mudar
 
   return (
     <div className="relative flex items-center justify-center w-full h-full text-teal-500 overflow-hidden">

@@ -76,9 +76,9 @@ export default function ProfitByHourChart({
               cursor={{ fill: "hsl(var(--accent))", opacity: 0.4 }}
               content={
                 <ChartTooltipContent
-                  className="w-[180px]"
+                  className="w-45"
                   // 4. Fim do "any"! Tipagem nativa do Recharts para o valor
-                  formatter={(value: string | number) => {
+                  formatter={(value) => {
                     const numericValue = Number(value);
                     const isNegative = numericValue < 0;
                     return (

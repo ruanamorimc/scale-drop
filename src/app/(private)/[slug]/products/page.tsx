@@ -6,8 +6,8 @@ import { columns, Product } from "./columns";
 import { DataTable } from "@/components/data-table/DataTable";
 import { ProductEditSheet } from "@/components/products/ProductEditSheet";
 
-import { Fee } from "@/app/(private)/[workspaceId]/finance/fees/columns";
-import { Tax } from "@/app/(private)/[workspaceId]/finance/taxes/columns";
+import { Fee } from "@/app/(private)/[slug]/finance/fees/columns";
+import { Tax } from "@/app/(private)/[slug]/finance/taxes/columns";
 import { getFees } from "@/actions/fees";
 import { getTaxes } from "@/actions/taxes";
 

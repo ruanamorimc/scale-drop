@@ -1,8 +1,8 @@
 "use server"; // 👈 Importante! Garante que roda no servidor e não vaza chaves
 
-import { updateIntegrationTokens } from "@/services/store-integration";
 import prisma from "@/lib/prisma";
-import { StorePlatform } from "@/generated/prisma/client";
+import { updateIntegrationTokens } from "@/services/store-integration";
+import { IntegrationProvider } from "@prisma/client";
 
 export async function refreshMercadoLivreToken(userId: string) {
   try {
@@ -11,7 +11,7 @@ export async function refreshMercadoLivreToken(userId: string) {
     const integration = await prisma.storeIntegration.findFirst({
       where: {
         userId: userId,
-        platform: StorePlatform.MERCADO_LIVRE, // 👇 Usando o Enum correto
+        platform: IntegrationProvider.MERCADO_LIVRE, // 👇 Usando o Enum correto
       },
     });
 
@@ -51,7 +51,11 @@ export async function refreshMercadoLivreToken(userId: string) {
     const data = await response.json();
 
     // Opcional: Aqui você salvaria o NOVO refresh_token no seu banco de dados
-    await updateIntegrationTokens(userId, data);
+    await updateIntegrationTokens(
+      userId,
+      data.access_token,
+      data.refresh_token,
+    );
 
     return data; // Retorna { access_token, token_type, expires_in, scope, refresh_token }
   } catch (error) {
