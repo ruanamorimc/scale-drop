@@ -6,7 +6,7 @@ import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
 import { toast } from "sonner";
 import { authClient } from "@/lib/auth-client"; // Seu cliente de auth
-import { Session } from "@/generated/prisma/client";
+import { Session } from "@prisma/client";
 
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
