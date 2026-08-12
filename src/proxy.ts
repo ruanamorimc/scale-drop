@@ -56,7 +56,8 @@ export async function proxy(request: NextRequest) {
   }
 
   // REGRA B: USUÁRIO AUTENTICADO
-  const isActive = user?.accessStatus === "ACTIVE";
+  const isAdmin = user?.role?.toLowerCase() === "admin";
+  const isActive = user?.accessStatus === "ACTIVE" || isAdmin;
 
   // B1. O Guardião Financeiro: Logado, mas SEM plano ativo
   if (!isActive) {
