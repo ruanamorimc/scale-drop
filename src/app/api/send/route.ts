@@ -1,15 +1,19 @@
-import { EmailTemplate } from '../../../components/email-template';
-import { Resend } from 'resend';
+import React from "react";
+import { VerifyEmailTemplate } from "@/components/verify-email-template";
+import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
 export async function POST() {
   try {
     const { data, error } = await resend.emails.send({
-      from: 'Acme <onboarding@resend.dev>',
-      to: ['delivered@resend.dev'],
-      subject: 'Hello world',
-      react: EmailTemplate({ firstName: `'Ruan'` }),
+      from: "Acme <onboarding@resend.dev>",
+      to: ["delivered@resend.dev"],
+      subject: "Hello world",
+      react: React.createElement(VerifyEmailTemplate, {
+        userName: "Ruan",
+        url: "https://scaledrop.com.br",
+      }),
     });
 
     if (error) {

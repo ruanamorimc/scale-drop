@@ -1,9 +1,11 @@
+import React from "react";
 import { betterAuth } from "better-auth";
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { APIError, createAuthMiddleware } from "better-auth/api";
 import prisma from "@/lib/prisma";
 import { passwordSchema } from "./validation";
 import { sendEmail } from "./email";
+import { VerifyEmailTemplate } from "@/components/verify-email-template";
 
 // 👇 1. ADICIONE ESSA FUNÇÃO AQUI NO TOPO
 // Isso simula o envio de email imprimindo no terminal preto do VS Code
@@ -52,7 +54,11 @@ export const auth = betterAuth({
       await sendEmail({
         to: user.email,
         subject: "Verifique seu Email - Scale Drop",
-        text: `Clique no link para verificar seu email: ${url}`,
+        text: `Confirme seu e-mail acessando o link: ${url}`,
+        react: React.createElement(VerifyEmailTemplate, {
+          userName: user.name,
+          url: url,
+        }),
       });
     },
   },
