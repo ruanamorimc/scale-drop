@@ -24,6 +24,8 @@ export const auth = betterAuth({
   trustedOrigins: [
     "http://localhost:3000",
     "https://uncruel-tonda-theoretically.ngrok-free.dev", // Seu link do Ngrok
+    "https://scale-drop.vercel.app",
+    "https://*.vercel.app", // Libera todas as URLs de preview da Vercel
   ],
   emailAndPassword: {
     enabled: true,
