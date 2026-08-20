@@ -44,6 +44,7 @@ model User {
   fees                Fee[]
   taxes               Tax[]
   fixedExpenses       FixedExpense[]
+  rules Rule[]
 
   // 🔥 NOVO CAMPO PARA O GRID:
   dashboardLayout Json?
@@ -92,6 +93,8 @@ model Workspace {
   taxes         Tax[]
   fees          Fee[]
   fixedExpenses FixedExpense[]
+
+  rules Rule[]
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
@@ -457,6 +460,62 @@ model MetaPixel {
 
   @@index([userId])
   @@map("meta_pixel")
+}
+
+model Rule {
+  id                   String    @id @default(cuid())
+  workspaceId          String
+  userId               String
+  
+  name                 String
+  status               Boolean   @default(true) // Ativa / Inativa
+  
+  // Filtros de Escopo
+  product              String?   // "Qualquer" ou ID do produto
+  adAccounts           String[]  // Array de IDs de contas de anúncios
+  applyTo              String    // CAMPAIGN, ADSET, AD
+  filterByName         String?   // Filtro por nome de campanha/adset
+  
+  // Ação e Condições
+  action               String    // PAUSE, ENABLE, INCREASE_BUDGET, DECREASE_BUDGET, SET_BUDGET
+  actionValue          Float?    // NOVO: Valor da ação (ex: 25 para 25%, ou 100.00 para R$100)
+  actionUnit           String?   // NOVO: Unidade ("percentage", "fixed", "absolute", "spent_amount")
+  budgetLimit          Float?    // NOVO: Limite máximo/mínimo de orçamento
+  metricsLevel         String    // OBJECT_LEVEL
+  conditions           Json      // [{ metric: 'CPA', operator: 'GREATER_THAN', value: 50 }]
+  
+  // Período e Frequência de Execução
+  evaluationPeriod     String    // TODAY, YESTERDAY, LAST_3_DAYS, LAST_7_DAYS
+  frequency            String    // EVERY_15_MIN, EVERY_HOUR, DAILY
+  executionWindow      String?   // ANYTIME, SPECIFIC_HOURS
+  dailyLimit           Int?      // Limite de execuções diárias
+  dailyExecutionsCount Int       @default(0)
+  
+  lastExecutedAt       DateTime?
+  createdAt            DateTime  @default(now())
+  updatedAt            DateTime  @updatedAt
+
+  // Relacionamentos
+  workspace            Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user                 User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  logs                 RuleLog[]
+
+  @@index([workspaceId])
+  @@index([status])
+}
+
+// Tabela de Histórico de Execuções (Essencial para o usuário saber o que a regra fez)
+model RuleLog {
+  id          String   @id @default(cuid())
+  ruleId      String
+  actionTaken String   // ex: "Pausou a campanha X (ID: 12345)"
+  status      String   // SUCCESS, ERROR
+  message     String?  // Detalhes da alteração ou mensagem de erro da API do Meta
+  createdAt   DateTime @default(now())
+
+  rule        Rule     @relation(fields: [ruleId], references: [id], onDelete: Cascade)
+
+  @@index([ruleId])
 }
 
 // ============================================

@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef, useTransition } from "react";
 import {
   Dialog,
   DialogContent,
@@ -24,15 +24,57 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
-import { Plus, X, Info } from "lucide-react";
+import { Plus, X, Info, Loader2 } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { toast } from "sonner";
+import { createRuleAction, getWorkspaceOptionsAction } from "@/actions/rules";
+
+export const OPERATOR_OPTIONS = [
+  { label: "Maior que (>)", value: ">" },
+  { label: "Menor que (<)", value: "<" },
+  { label: "Maior ou igual (≥)", value: ">=" },
+  { label: "Menor ou igual (≤)", value: "<=" },
+];
+
+export interface ConditionData {
+  metric: string;
+  operator: string;
+  value: string | number;
+}
+
+export interface RuleData {
+  id?: string;
+  name?: string;
+  product?: string;
+  adAccounts?: string[];
+  account?: string;
+  scope?: string;
+  applyTo?: string;
+  nameFilterType?: string;
+  nameFilterOperator?: string;
+  nameFilterValue?: string;
+  action?: string;
+  actionValue?: string | number | null;
+  actionUnit?: string | null;
+  conditionLevel?: string;
+  metricsLevel?: string;
+  conditions?: ConditionData[];
+  period?: string;
+  evaluationPeriod?: string;
+  frequency?: string;
+  dailyLimit?: string;
+  executionInterval?: string;
+  executionWindow?: string | null;
+  budgetLimit?: number | null;
+}
 
 interface CreateRuleModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onSave: (ruleData: any) => void;
-  initialData?: any; // 🔥 Adicionado para receber dados da regra sendo editada
+  workspaceId: string;
+  userId: string;
+  onSave?: (ruleData: RuleData) => void;
+  initialData?: RuleData;
 }
 
 const METRIC_TYPES: Record<
@@ -119,10 +161,25 @@ const TIME_OPTIONS = Array.from({ length: 24 }, (_, i) => {
 export function CreateRuleModal({
   open,
   onOpenChange,
+  workspaceId,
+  userId,
   onSave,
   initialData,
 }: CreateRuleModalProps) {
-  // ESTADOS
+  const [isPending, startTransition] = useTransition();
+  const isSubmittingRef = useRef(false); // 🔒 Trava síncrona
+  const [isSubmitting, setIsSubmitting] = useState(false); // Trava extra de envio
+
+  // DADOS DINÂMICOS DO BANCO DE DADOS
+  const [dbProducts, setDbProducts] = useState<{ id: string; name: string }[]>(
+    [],
+  );
+  const [dbAdAccounts, setDbAdAccounts] = useState<
+    { id: string; name: string }[]
+  >([]);
+  const [isLoadingOptions, setIsLoadingOptions] = useState(false);
+
+  // ESTADOS DO FORMULÁRIO
   const [name, setName] = useState("");
   const [product, setProduct] = useState("qualquer");
   const [account, setAccount] = useState("todas");
@@ -137,6 +194,9 @@ export function CreateRuleModal({
   const [conditions, setConditions] = useState<
     { metric: string; operator: string; value: string }[]
   >([]);
+  const [budgetLimit, setBudgetLimit] = useState("");
+  const [actionValue, setActionValue] = useState("");
+  const [actionUnit, setActionUnit] = useState("percentage");
 
   const [period, setPeriod] = useState("today");
   const [frequency, setFrequency] = useState("15min");
@@ -147,42 +207,111 @@ export function CreateRuleModal({
 
   const [dailyLimit, setDailyLimit] = useState("no_limit");
 
-  // 🔥 EFEITO PARA CARREGAR OS DADOS AO EDITAR
+  // BUSCA PRODUTOS E CONTAS DE ANÚNCIO VINCULADOS AO WORKSPACE
+  useEffect(() => {
+    async function loadWorkspaceOptions() {
+      if (!open || !workspaceId) return;
+      setIsLoadingOptions(true);
+      try {
+        const res = await getWorkspaceOptionsAction(workspaceId);
+        if (res.success) {
+          setDbProducts(res.products || []);
+          setDbAdAccounts(res.adAccounts || []);
+        }
+      } catch (error) {
+        console.error("Erro ao carregar opções do workspace:", error);
+      } finally {
+        setIsLoadingOptions(false);
+      }
+    }
+
+    loadWorkspaceOptions();
+  }, [open, workspaceId]);
+
   useEffect(() => {
     if (open) {
       if (initialData) {
         setName(initialData.name || "");
         setProduct(initialData.product || "qualquer");
-        setAccount(initialData.account || "todas");
-        setScope(initialData.scope || "active_campaigns");
+        setAccount(
+          Array.isArray(initialData.adAccounts) &&
+            initialData.adAccounts.length > 0
+            ? initialData.adAccounts[0]
+            : initialData.account || "todas",
+        );
+        setScope(
+          initialData.scope || initialData.applyTo || "active_campaigns",
+        );
         setNameFilterType(initialData.nameFilterType || "any");
         setNameFilterOperator(initialData.nameFilterOperator || "contains");
         setNameFilterValue(initialData.nameFilterValue || "");
-        setAction(initialData.action || "pause");
-        setConditionLevel(initialData.conditionLevel || "object");
-        setConditions(
-          initialData.conditions ? [...initialData.conditions] : [],
-        );
-        setPeriod(initialData.period || "today");
-        setFrequency(initialData.frequency || "15min");
-        setDailyLimit(initialData.dailyLimit || "no_limit");
 
-        // Tratar o intervalo de tempo
+        setAction(initialData.action || "pause");
+        setActionValue(
+          initialData.actionValue !== undefined &&
+            initialData.actionValue !== null
+            ? String(initialData.actionValue)
+            : "",
+        );
+        setActionUnit(initialData.actionUnit || "percentage");
+
+        setConditionLevel(
+          initialData.conditionLevel || initialData.metricsLevel || "object",
+        );
+
+        // 🟢 CORREÇÃO DAS CONDIÇÕES: Trata tanto String JSON quanto Array
+        let parsedConditions: ConditionData[] = [];
+        if (typeof initialData.conditions === "string") {
+          try {
+            parsedConditions = JSON.parse(initialData.conditions);
+          } catch (error) {
+            console.error("Erro ao converter JSON de condições:", error);
+            parsedConditions = [];
+          }
+        } else if (Array.isArray(initialData.conditions)) {
+          parsedConditions = initialData.conditions;
+        }
+
+        setConditions(
+          parsedConditions.map((c: ConditionData) => ({
+            metric: c.metric || "spent",
+            operator: c.operator || "greater_than",
+            value: String(c.value ?? ""),
+          })),
+        );
+
+        setPeriod(
+          initialData.period || initialData.evaluationPeriod || "today",
+        );
+        setFrequency(initialData.frequency || "15min");
+
+        // 🟢 CORREÇÃO DO LIMITE DIÁRIO: Carrega números ou 'no_limit'
         if (
-          initialData.executionInterval &&
-          initialData.executionInterval.includes("-")
+          initialData.dailyLimit !== null &&
+          initialData.dailyLimit !== undefined &&
+          initialData.dailyLimit !== ""
         ) {
+          setDailyLimit(String(initialData.dailyLimit));
+        } else {
+          setDailyLimit("no_limit");
+        }
+
+        // 🟢 CORREÇÃO DO INTERVALO DE EXECUÇÃO (Suporta 'executionWindow' e 'executionInterval')
+        const windowVal =
+          initialData.executionWindow || initialData.executionInterval;
+
+        if (typeof windowVal === "string" && windowVal.includes("-")) {
           setExecutionIntervalType("custom");
-          const [s, e] = initialData.executionInterval.split("-");
+          const [s, e] = windowVal.split("-");
           setStartTime(s || "00:00");
           setEndTime(e || "00:00");
         } else {
-          setExecutionIntervalType(initialData.executionInterval || "any");
+          setExecutionIntervalType(windowVal || "any");
           setStartTime("00:00");
           setEndTime("00:00");
         }
       } else {
-        // Modo Criação: Reseta tudo
+        // ➕ RESETA PARA OS VALORES PADRÃO AO CRIAR NOVA REGRA
         setName("");
         setProduct("qualquer");
         setAccount("todas");
@@ -190,7 +319,11 @@ export function CreateRuleModal({
         setNameFilterType("any");
         setNameFilterOperator("contains");
         setNameFilterValue("");
+
         setAction("pause");
+        setActionValue("");
+        setActionUnit("percentage");
+
         setConditionLevel("object");
         setConditions([]);
         setPeriod("today");
@@ -203,30 +336,72 @@ export function CreateRuleModal({
     }
   }, [open, initialData]);
 
+  // ==========================================
+  // 🟢 GERENCIAMENTO DE CONDIÇÕES (SE)
+  // ==========================================
+
+  /** Adiciona uma nova linha de condição no formulário */
   const addCondition = () => {
     setConditions([
       ...conditions,
-      { metric: "spent", operator: "greater_than", value: "" },
+      { metric: "spent", operator: ">", value: "" },
     ]);
   };
 
+  /** Remove uma linha de condição pelo seu índice */
   const removeCondition = (index: number) => {
     const newConditions = [...conditions];
     newConditions.splice(index, 1);
     setConditions(newConditions);
   };
 
-  const updateCondition = (index: number, field: string, value: string) => {
+  /** Atualiza um campo específico (métrica, operador ou valor) de uma condição */
+  const updateCondition = (
+    index: number,
+    field: keyof ConditionData,
+    value: string,
+  ) => {
     const newConditions = [...conditions];
-    (newConditions[index] as any)[field] = value;
+
+    // Atualiza o valor do campo selecionado
+    newConditions[index] = { ...newConditions[index], [field]: value };
+
+    // Se o usuário trocar a métrica, reseta o valor digitado para evitar inconsistência
     if (field === "metric") {
-      (newConditions[index] as any).value = "";
+      newConditions[index] = { ...newConditions[index], value: "" };
     }
+
     setConditions(newConditions);
   };
 
+  // FUNÇÃO DE MÁSCARA AUTOMÁTICA (Para % e R$)
+  const handleFormatValue = (
+    val: string,
+    type: "percentage" | "fixed" | "absolute",
+    setter: (v: string) => void,
+  ) => {
+    const digits = val.replace(/\D/g, ""); // Remove tudo que não for número
+    if (!digits) {
+      setter("");
+      return;
+    }
+
+    if (type === "percentage") {
+      setter(`${digits}%`);
+    } else {
+      const floatValue = parseInt(digits, 10) / 100;
+      const formatted = new Intl.NumberFormat("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+      }).format(floatValue);
+      setter(formatted);
+    }
+  };
+
   const handleSave = () => {
-    // 🔥 VALIDAÇÕES
+    // 1. Evita envio duplo instantaneamente com o useRef
+    if (isSubmittingRef.current || isSubmitting || isPending) return;
+
     if (!name.trim()) {
       toast.error("Por favor, dê um nome para a regra.");
       return;
@@ -237,7 +412,9 @@ export function CreateRuleModal({
       return;
     }
 
-    const hasEmptyCondition = conditions.some((c) => !c.value.trim());
+    const hasEmptyCondition = conditions.some(
+      (c) => !String(c.value ?? "").trim(),
+    );
     if (hasEmptyCondition) {
       toast.error("Preencha o valor de todas as condições adicionadas.");
       return;
@@ -250,31 +427,93 @@ export function CreateRuleModal({
       return;
     }
 
-    onSave({
-      name,
-      product,
-      account,
-      scope,
-      nameFilterType,
-      nameFilterOperator,
-      nameFilterValue,
-      action,
-      conditionLevel,
-      conditions,
-      period,
-      frequency,
-      executionInterval:
-        executionIntervalType === "custom"
-          ? `${startTime}-${endTime}`
-          : executionIntervalType,
-      dailyLimit,
-      status: initialData?.status ?? true, // Mantém o status original
+    // Validação extra para Ação Condicional
+    const requiresActionValue = [
+      "increase_budget",
+      "decrease_budget",
+      "set_budget",
+    ].includes(action);
+    if (requiresActionValue && !actionValue) {
+      toast.error("Por favor, preencha o valor da ação de orçamento.");
+      return;
+    }
+
+    const formattedConditions = conditions.map((c) => {
+      const rawValue = String(c.value ?? "").replace(",", ".");
+      return {
+        metric: c.metric,
+        operator: c.operator,
+        value: parseFloat(rawValue) || 0,
+      };
     });
 
-    onOpenChange(false);
+    // 2. ATIVA A TRAVA SÍNCRONA IMEDIATAMENTE NA MEMÓRIA
+    isSubmittingRef.current = true;
+    setIsSubmitting(true);
+
+    const parseFormattedValue = (strValue: string | number, type: string) => {
+      const str = String(strValue).replace(/\D/g, "");
+      if (!str) return 0;
+      if (type === "percentage") return parseFloat(str);
+      return parseFloat(str) / 100; // Divide por 100 se for moeda
+    };
+
+    startTransition(async () => {
+      try {
+        const response = await createRuleAction({
+          id: initialData?.id,
+          workspaceId,
+          userId,
+          name,
+          product,
+          adAccounts: [account],
+          applyTo: scope,
+          action,
+          actionValue: requiresActionValue
+            ? parseFormattedValue(actionValue, actionUnit)
+            : null,
+          actionUnit: requiresActionValue ? actionUnit : null,
+          budgetLimit:
+            (action === "increase_budget" || action === "decrease_budget") &&
+            budgetLimit
+              ? parseFormattedValue(budgetLimit, "fixed")
+              : null,
+          metricsLevel: conditionLevel,
+          conditions: formattedConditions,
+          evaluationPeriod: period,
+          frequency,
+
+          executionWindow:
+            executionIntervalType === "custom"
+              ? `${startTime}-${endTime}`
+              : executionIntervalType,
+          dailyLimit: dailyLimit === "no_limit" ? null : dailyLimit,
+        });
+
+        if (response.success) {
+          toast.success(
+            initialData
+              ? "Regra atualizada com sucesso!"
+              : "Regra criada com sucesso!",
+          );
+          if (onSave && response.rule) {
+            onSave(response.rule as unknown as RuleData);
+          }
+          onOpenChange(false);
+        } else {
+          toast.error(response.error || "Erro ao salvar a regra.");
+        }
+      } catch (error) {
+        toast.error("Ocorreu um erro inesperado ao salvar.");
+      } finally {
+        // 3. Libera as travas no final de tudo
+        setIsSubmitting(false);
+        isSubmittingRef.current = false;
+      }
+    });
   };
 
-  const renderValueInput = (cond: any, index: number) => {
+  const renderValueInput = (cond: ConditionData, index: number) => {
     const type = METRIC_TYPES[cond.metric] || "number";
     return (
       <div className="relative w-full">
@@ -348,32 +587,49 @@ export function CreateRuleModal({
                 />
               </div>
 
-              {/* PRODUTO / CONTA */}
+              {/* PRODUTO / CONTA (INTEGRADOS AO BANCO) */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
                   <LabelWithTooltip label="Produto" />
                   <div className={inputContainerClass}>
-                    <Select value={product} onValueChange={setProduct}>
+                    <Select
+                      value={product}
+                      onValueChange={setProduct}
+                      disabled={isLoadingOptions}
+                    >
                       <SelectTrigger className={selectTriggerClass}>
-                        <SelectValue />
+                        <SelectValue placeholder="Selecione..." />
                       </SelectTrigger>
                       <SelectContent className={SCROLLABLE_SELECT_CONTENT}>
                         <SelectItem value="qualquer">Qualquer</SelectItem>
-                        <SelectItem value="produto_a">Produto A</SelectItem>
+                        {dbProducts.map((p) => (
+                          <SelectItem key={p.id} value={p.id}>
+                            {p.name}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
                 </div>
+
                 <div>
                   <LabelWithTooltip label="Contas de Anúncio" />
                   <div className={inputContainerClass}>
-                    <Select value={account} onValueChange={setAccount}>
+                    <Select
+                      value={account}
+                      onValueChange={setAccount}
+                      disabled={isLoadingOptions}
+                    >
                       <SelectTrigger className={selectTriggerClass}>
-                        <SelectValue />
+                        <SelectValue placeholder="Selecione..." />
                       </SelectTrigger>
                       <SelectContent className={SCROLLABLE_SELECT_CONTENT}>
                         <SelectItem value="todas">Todas</SelectItem>
-                        <SelectItem value="conta_1">Conta 01</SelectItem>
+                        {dbAdAccounts.map((acc) => (
+                          <SelectItem key={acc.id} value={acc.id}>
+                            {acc.name}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </div>
@@ -458,35 +714,190 @@ export function CreateRuleModal({
               </div>
 
               {/* AÇÃO */}
-              <div>
-                <LabelWithTooltip label="Ação" />
-                <div
-                  className={cn(
-                    inputContainerClass,
-                    "border-blue-500/30 bg-blue-500/5 dark:bg-blue-500/10",
-                  )}
-                >
-                  <Select value={action} onValueChange={setAction}>
-                    <SelectTrigger
+              <div className="space-y-4">
+                <div className="flex gap-4 items-end">
+                  {/* BLOCO 1: SELETOR DE AÇÃO */}
+                  <div
+                    className={cn(
+                      "flex-[1.5]",
+                      action === "increase_budget" ||
+                        action === "decrease_budget"
+                        ? ""
+                        : "flex-none w-full",
+                    )}
+                  >
+                    <LabelWithTooltip label="Ação" />
+                    <div
                       className={cn(
-                        selectTriggerClass,
-                        "text-blue-500 dark:text-blue-400 font-medium",
+                        inputContainerClass,
+                        "border-blue-500/30 bg-blue-500/5 dark:bg-blue-500/10",
                       )}
                     >
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent className={SCROLLABLE_SELECT_CONTENT}>
-                      <SelectItem value="activate">Ativar</SelectItem>
-                      <SelectItem value="pause">Pausar</SelectItem>
-                      <SelectItem value="increase_budget">
-                        Aumentar orçamento
-                      </SelectItem>
-                      <SelectItem value="decrease_budget">
-                        Diminuir orçamento
-                      </SelectItem>
-                    </SelectContent>
-                  </Select>
+                      <Select
+                        value={action}
+                        onValueChange={(val) => {
+                          setAction(val);
+                          setActionValue("");
+                          setActionUnit(
+                            val === "set_budget" ? "absolute" : "percentage",
+                          );
+                          setBudgetLimit(""); // Reseta o limite
+                        }}
+                      >
+                        <SelectTrigger
+                          className={cn(
+                            selectTriggerClass,
+                            "text-blue-500 dark:text-blue-400 font-medium",
+                          )}
+                        >
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent className={SCROLLABLE_SELECT_CONTENT}>
+                          <SelectItem value="activate">Ativar</SelectItem>
+                          <SelectItem value="pause">Pausar</SelectItem>
+                          <SelectItem value="increase_budget">
+                            Aumentar orçamento
+                          </SelectItem>
+                          <SelectItem value="decrease_budget">
+                            Diminuir orçamento
+                          </SelectItem>
+                          <SelectItem value="set_budget">
+                            Definir orçamento
+                          </SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                  </div>
+
+                  {/* BLOCO 2: INPUT E TIPO MESCLADOS (Apenas para Aumentar/Diminuir) */}
+                  {(action === "increase_budget" ||
+                    action === "decrease_budget") && (
+                    <div className="flex-1 animate-in fade-in slide-in-from-right-2 duration-200">
+                      <Label className="text-[10px] text-muted-foreground uppercase mb-1.5 block">
+                        {actionUnit === "percentage"
+                          ? "Porcentagem"
+                          : "Valor fixo"}
+                      </Label>
+                      <div className="flex items-center border border-border rounded-md bg-background focus-within:ring-1 focus-within:ring-primary/50 overflow-hidden h-10 transition-shadow">
+                        <Input
+                          type="text"
+                          placeholder={
+                            actionUnit === "percentage" ? "0%" : "R$ 0,00"
+                          }
+                          className="border-none shadow-none focus-visible:ring-0 h-full flex-1 rounded-none px-3"
+                          value={actionValue}
+                          onChange={(e) =>
+                            handleFormatValue(
+                              e.target.value,
+                              actionUnit as "percentage" | "fixed",
+                              setActionValue,
+                            )
+                          }
+                        />
+                        <div className="w-[1px] h-6 bg-border mx-1" />
+                        <Select
+                          value={actionUnit}
+                          onValueChange={(val) => {
+                            setActionUnit(val);
+                            setActionValue("");
+                          }}
+                        >
+                          <SelectTrigger className="border-none shadow-none focus-visible:ring-0 w-[70px] h-full rounded-none bg-transparent">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className={SCROLLABLE_SELECT_CONTENT}>
+                            <SelectItem value="percentage">%</SelectItem>
+                            <SelectItem value="fixed">R$</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                    </div>
+                  )}
                 </div>
+
+                {/* BLOCO 3: LIMITE DE ORÇAMENTO (Linha de baixo) */}
+                {(action === "increase_budget" ||
+                  action === "decrease_budget") && (
+                  <div className="animate-in fade-in slide-in-from-top-1 duration-200">
+                    <LabelWithTooltip
+                      label={
+                        action === "increase_budget"
+                          ? "Limite máximo de orçamento"
+                          : "Limite mínimo de orçamento"
+                      }
+                      tooltipText={`Este é o valor ${action === "increase_budget" ? "máximo" : "mínimo"} que o seu orçamento pode atingir por meio das regras. Se o valor for zero, o orçamento não terá limite.`}
+                    />
+                    <Input
+                      type="text"
+                      placeholder="R$ 0,00"
+                      className="bg-background border-border h-10 focus-visible:ring-primary/50"
+                      value={budgetLimit}
+                      onChange={(e) =>
+                        handleFormatValue(
+                          e.target.value,
+                          "fixed",
+                          setBudgetLimit,
+                        )
+                      }
+                    />
+                  </div>
+                )}
+
+                {/* BLOCO 4: DEFINIR ORÇAMENTO (Ação: set_budget) */}
+                {action === "set_budget" && (
+                  <div className="space-y-4 animate-in fade-in slide-in-from-top-1 duration-200">
+                    <div className="flex gap-4">
+                      <div className="flex-1">
+                        <Label className="text-[10px] text-muted-foreground uppercase mb-1.5 block">
+                          Valor a definir
+                        </Label>
+                        <Input
+                          type="text"
+                          placeholder="R$ 0,00"
+                          className="bg-background border-border h-10 focus-visible:ring-primary/50"
+                          value={actionValue}
+                          onChange={(e) =>
+                            handleFormatValue(
+                              e.target.value,
+                              "fixed",
+                              setActionValue,
+                            )
+                          }
+                        />
+                      </div>
+                      <div className="flex-1">
+                        <Label className="text-[10px] text-muted-foreground uppercase mb-1.5 block">
+                          Tipo
+                        </Label>
+                        <div className={inputContainerClass}>
+                          <Select
+                            value={actionUnit}
+                            onValueChange={setActionUnit}
+                          >
+                            <SelectTrigger className={selectTriggerClass}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent
+                              className={SCROLLABLE_SELECT_CONTENT}
+                            >
+                              <SelectItem value="absolute">Absoluto</SelectItem>
+                              <SelectItem value="spent_amount">
+                                Valor gasto
+                              </SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                    </div>
+                    <div className="bg-red-500/10 text-red-500 p-4 rounded-md text-sm border border-red-500/20">
+                      <p className="font-bold mb-1">Atenção!</p>
+                      <p className="text-xs leading-relaxed">
+                        É necessário respeitar os limites mínimo e máximo
+                        impostos pela plataforma de anúncios...
+                      </p>
+                    </div>
+                  </div>
+                )}
               </div>
 
               {/* NÍVEL DAS CONDIÇÕES */}
@@ -538,7 +949,7 @@ export function CreateRuleModal({
                     <Button
                       variant="ghost"
                       size="icon"
-                      className="absolute top-2 right-2 h-6 w-6 text-muted-foreground hover:text-red-500 hover:bg-red-500/10"
+                      className="absolute -top-2.5 -right-2.5 h-6 w-6 text-muted-foreground hover:text-red-500 hover:bg-red-500/10"
                       onClick={() => removeCondition(index)}
                     >
                       <X size={14} />
@@ -575,13 +986,14 @@ export function CreateRuleModal({
                           <SelectTrigger
                             className={cn(selectTriggerClass, "h-9")}
                           >
-                            <SelectValue />
+                            <SelectValue placeholder="Selecione" />
                           </SelectTrigger>
                           <SelectContent className={SCROLLABLE_SELECT_CONTENT}>
-                            <SelectItem value="greater_than">
-                              Maior que
-                            </SelectItem>
-                            <SelectItem value="less_than">Menor que</SelectItem>
+                            {OPERATOR_OPTIONS.map((op) => (
+                              <SelectItem key={op.value} value={op.value}>
+                                {op.label}
+                              </SelectItem>
+                            ))}
                           </SelectContent>
                         </Select>
                       </div>
@@ -788,7 +1200,7 @@ export function CreateRuleModal({
                         {Array.from({ length: 10 }, (_, i) => i + 1).map(
                           (num) => (
                             <SelectItem key={num} value={String(num)}>
-                              {num}
+                              {num} {num === 1 ? "vez" : "vezes"}
                             </SelectItem>
                           ),
                         )}
@@ -799,19 +1211,30 @@ export function CreateRuleModal({
               </div>
             </div>
 
-            <DialogFooter className="px-6 py-4 border-t border-border/40 bg-background/50 backdrop-blur-sm shrink-0">
+            <DialogFooter className="px-6 py-4 border-t border-border/40 shrink-0 bg-background/50 backdrop-blur-sm flex items-center justify-end gap-2">
               <Button
+                type="button"
                 variant="outline"
                 onClick={() => onOpenChange(false)}
-                className="bg-transparent border-border hover:bg-muted text-foreground"
+                disabled={isSubmitting || isPending}
               >
                 Cancelar
               </Button>
               <Button
+                type="button"
                 onClick={handleSave}
-                className="bg-blue-600 hover:bg-blue-700 text-white min-w-[100px]"
+                disabled={isSubmitting || isPending}
+                className="group/btn relative overflow-hidden px-5 w-32 h-9 rounded-md text-white border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 shadow-lg hover:shadow-2xl hover:shadow-blue-500/40 hover:scale-105 active:scale-95 transition-all duration-300 flex items-center justify-center disabled:opacity-80 cursor-pointer"
               >
-                Salvar
+                <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover/btn:translate-x-full transition-transform duration-0 group-hover/btn:duration-[1200ms] ease-out" />
+                {(isSubmitting || isPending) && (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                )}
+                {isSubmitting || isPending
+                  ? "Salvando..."
+                  : initialData
+                    ? "Salvar alterações"
+                    : "Criar regra"}
               </Button>
             </DialogFooter>
           </div>

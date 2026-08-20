@@ -1,22 +1,26 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import { useParams } from "next/navigation";
+import React, {
+  useState,
+  useRef,
+  useEffect,
+  useCallback,
+  useMemo,
+} from "react";
 import { authClient } from "@/lib/auth-client";
+import { PLAN_LIMITS, type PlanType } from "@/config/plans";
 import {
   Plus,
-  MoreHorizontal,
   Search,
-  Edit,
-  Trash,
   Upload,
   Download,
   Facebook,
-  Filter,
   Info,
+  Trash,
 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { Button } from "@/components/ui/button";
-import { Checkbox } from "@/components/ui/checkbox";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -24,7 +28,6 @@ import {
   DropdownMenuTrigger,
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import {
   Tooltip,
@@ -50,6 +53,17 @@ import { MarketingHeader } from "@/components/marketing/MarketingHeader";
 import { PremiumCard } from "@/components/cards/PremiumCard";
 import { CreateRuleModal } from "@/components/marketing/CreateRuleModal";
 
+import { AutomationRule } from "./types";
+import { RulesTable } from "@/components/data-table/RulesTable";
+import { getColumns } from "./columns";
+import {
+  getRulesAction,
+  createRuleAction,
+  deleteRuleAction,
+  toggleRuleStatusAction,
+  RuleCondition,
+} from "@/actions/rules";
+
 const GoogleIcon = ({ className }: { className?: string }) => (
   <svg viewBox="0 0 24 24" className={className}>
     <path
@@ -71,139 +85,383 @@ const GoogleIcon = ({ className }: { className?: string }) => (
   </svg>
 );
 
-interface AutomationRule {
-  id: string;
-  name: string;
-  product: string;
-  account: string;
-  scope: string;
-  action: string;
-  conditions: string;
-  frequency: string;
-  period: string;
-  status: boolean;
-  rawConfig: any; // 🔥 Guarda as configs brutas para alimentar a Edição
+type AuthUser = {
+  id?: string;
+  name?: string;
+  email?: string;
+  image?: string;
+  role?: string;
+  plan?: string;
+};
+
+interface ConditionInput {
+  metric: string;
+  operator: string;
+  value: string;
 }
 
-const MOCK_RULES: AutomationRule[] = [
-  {
-    id: "1",
-    name: "Pausar campanhas com CPA alto",
-    product: "Qualquer",
-    account: "Todas",
-    scope: "Campanhas Ativas",
-    action: "Pausar",
-    conditions: "CPA > R$ 50,00",
-    frequency: "15 min",
-    period: "Hoje",
-    status: true,
-    rawConfig: {
-      name: "Pausar campanhas com CPA alto",
-      product: "qualquer",
-      account: "todas",
-      scope: "active_campaigns",
-      nameFilterType: "any",
-      action: "pause",
-      conditionLevel: "object",
-      conditions: [{ metric: "cpa", operator: "greater_than", value: "50" }],
-      period: "today",
-      frequency: "15min",
-      executionInterval: "any",
-      dailyLimit: "no_limit",
-    },
-  },
-];
+interface RuleFormData {
+  id?: string;
+  name?: string;
+  product?: string;
+  account?: string;
+  adAccounts?: string[];
+  scope?: string;
+  applyTo?: string;
+  action?: string;
+  conditions?: ConditionInput[] | string;
+  frequency?: string;
+  period?: string;
+  evaluationPeriod?: string;
+  status?: boolean;
+}
 
-export default function RegrasPage() {
-  const [rules, setRules] = useState<AutomationRule[]>(MOCK_RULES);
+interface DbCondition {
+  metric?: string;
+  operator?: string;
+  value?: string | number;
+}
+
+interface DbRule {
+  id: string;
+  name: string;
+  product?: string;
+  adAccounts?: string[];
+  applyTo?: string;
+  scope?: string;
+  action?: string;
+  conditions?: DbCondition[] | string;
+  frequency?: string;
+  evaluationPeriod?: string;
+  period?: string;
+  isActive?: boolean;
+  status?: boolean;
+}
+
+const SCOPE_LABELS: Record<string, string> = {
+  active_campaigns: "Campanhas Ativas",
+  all_campaigns: "Todas as Campanhas",
+  active_adsets: "Conjuntos Ativos",
+  active_ads: "Anúncios Ativos",
+};
+
+const ACTION_LABELS: Record<string, string> = {
+  pause: "Pausar",
+  enable: "Ativar",
+  increase_budget: "Aumentar Orçamento",
+  decrease_budget: "Diminuir Orçamento",
+  notify: "Notificar",
+};
+
+const PERIOD_LABELS: Record<string, string> = {
+  today: "Hoje",
+  yesterday: "Ontem",
+  last_3_days: "Últimos 3 dias",
+  last_7_days: "Últimos 7 dias",
+  maximum: "Vitalício",
+};
+
+const mapPrismaRuleToUI = (dbRule: DbRule): AutomationRule => {
+  const rawScope = dbRule.applyTo || dbRule.scope || "";
+  const rawPeriod = dbRule.evaluationPeriod || dbRule.period || "";
+
+  // Lê a condição diretamente como está no banco e passa limpa para frente!
+  let conditionsList: DbCondition[] | string = [];
+
+  if (typeof dbRule.conditions === "string") {
+    try {
+      conditionsList = JSON.parse(dbRule.conditions);
+    } catch {
+      conditionsList = dbRule.conditions; // Mantém fallback da string legada se existir
+    }
+  } else if (Array.isArray(dbRule.conditions)) {
+    conditionsList = dbRule.conditions;
+  }
+
+  return {
+    id: dbRule.id,
+    name: dbRule.name,
+    product: dbRule.product === "qualquer" ? "Qualquer" : "Específico",
+    account: dbRule.adAccounts?.length ? "Específica" : "Todas",
+    scope: SCOPE_LABELS[String(rawScope).toLowerCase()] || rawScope,
+    action:
+      ACTION_LABELS[String(dbRule.action || "").toLowerCase()] ||
+      dbRule.action ||
+      "",
+    // Passamos o array (ou string) direto para o columns.tsx formatar!
+    conditions: conditionsList as unknown as string,
+    frequency: dbRule.frequency || "15min",
+    period: PERIOD_LABELS[String(rawPeriod).toLowerCase()] || rawPeriod,
+    status: dbRule.isActive ?? dbRule.status ?? true,
+    rawConfig: dbRule as unknown as Record<string, unknown>,
+  };
+};
+
+export default function RulesPage() {
+  const params = useParams();
+  const rawSlug = params?.slug;
+  const workspaceId = Array.isArray(rawSlug)
+    ? rawSlug[0]
+    : (rawSlug as string) || "";
+
+  const [rules, setRules] = useState<AutomationRule[]>([]);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
-
-  // 🔥 ESTADO DE EDIÇÃO
   const [ruleToEdit, setRuleToEdit] = useState<AutomationRule | null>(null);
-
-  const [searchTerm, setSearchTerm] = useState("");
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [selectedRuleIds, setSelectedRuleIds] = useState<string[]>([]);
   const [itemsToDelete, setItemsToDelete] = useState<string[]>([]);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [isLoading, setIsLoading] = useState(true);
 
   const { data: session } = authClient.useSession();
+
+  const rawUser = session?.user as AuthUser | undefined;
+  const userId = rawUser?.id || "";
+
+  const role = rawUser?.role || "user";
+  const rawPlan = rawUser?.plan?.toUpperCase();
+  const plan: PlanType =
+    role === "admin"
+      ? "PRO"
+      : rawPlan && rawPlan in PLAN_LIMITS
+        ? (rawPlan as PlanType)
+        : "START";
+
   const currentUser = {
-    name: session?.user?.name || "Usuário",
-    email: session?.user?.email || "",
-    image: "",
+    id: rawUser?.id || "",
+    name: rawUser?.name || "Usuário",
+    email: rawUser?.email || "",
+    image: rawUser?.image || "",
+    role,
+    plan,
   };
 
-  // 🔥 FUNÇÃO PARA ABRIR EDIÇÃO
-  const openEditModal = (rule: AutomationRule) => {
+  const maxRules = PLAN_LIMITS[currentUser.plan].rules;
+  const isLimitReached = rules.length >= maxRules;
+
+  const openEditModal = useCallback((rule: AutomationRule) => {
     setRuleToEdit(rule);
     setIsCreateModalOpen(true);
-  };
+  }, []);
 
-  // 🔥 FUNÇÃO PARA ABRIR CRIAÇÃO
+  const confirmSingleDelete = useCallback((id: string) => {
+    setItemsToDelete([id]);
+  }, []);
+
   const openCreateModal = () => {
-    setRuleToEdit(null); // Reseta a regra
+    setRuleToEdit(null);
     setIsCreateModalOpen(true);
   };
 
-  const handleSaveRule = (data: any) => {
-    const conditionText = data.conditions
-      .map((c: any) => {
-        const op = c.operator === "greater_than" ? ">" : "<";
-        return `${c.metric.toUpperCase()} ${op} ${c.value}`;
-      })
-      .join(" E ");
+  const loadRules = useCallback(async () => {
+    if (!workspaceId) return;
+    setIsLoading(true);
+    const res = await getRulesAction(workspaceId);
+    if (res.success && res.rules) {
+      setRules((res.rules as DbRule[]).map(mapPrismaRuleToUI));
+    } else {
+      setRules([]);
+    }
+    setIsLoading(false);
+  }, [workspaceId]);
 
-    const newRule: AutomationRule = {
-      id: ruleToEdit ? ruleToEdit.id : Math.random().toString(36).substr(2, 9),
-      name: data.name,
-      product: data.product === "qualquer" ? "Qualquer" : "Específico",
-      account: data.account === "todas" ? "Todas" : "Específica",
-      scope: data.scope.replace("_", " ").toUpperCase(),
-      action: data.action,
-      conditions: conditionText || "Sem condições",
-      frequency: data.frequency,
-      period: data.period,
-      status: ruleToEdit ? ruleToEdit.status : true,
-      rawConfig: data, // Guarda a config para editar depois
+  useEffect(() => {
+    const fetchRules = async () => {
+      await loadRules();
     };
 
-    if (ruleToEdit) {
-      setRules(rules.map((r) => (r.id === ruleToEdit.id ? newRule : r)));
-      toast.success("Regra atualizada com sucesso!");
+    fetchRules();
+  }, [loadRules]);
+
+  // O Modal já salvou no banco!
+  // Aqui no page.tsx nós apenas atualizamos a lista de regras na tela.
+  const handleSaveRule = async () => {
+    await loadRules();
+  };
+
+  const toggleRuleStatus = useCallback(
+    async (id: string) => {
+      const targetRule = rules.find((r) => r.id === id);
+      if (!targetRule) return;
+
+      const res = await toggleRuleStatusAction(id, targetRule.status);
+
+      if (res.success) {
+        toast.success("Status atualizado com sucesso!");
+        await loadRules();
+      } else {
+        toast.error(res.error || "Erro ao atualizar status.");
+      }
+    },
+    [rules, loadRules],
+  );
+
+  const executeDelete = async () => {
+    if (itemsToDelete.length === 0) return;
+
+    const deletePromises = itemsToDelete.map((id) => deleteRuleAction(id));
+    const results = await Promise.all(deletePromises);
+
+    const hasError = results.some((r) => !r.success);
+
+    if (!hasError) {
+      toast.success(
+        itemsToDelete.length > 1
+          ? "Regras excluídas com sucesso."
+          : "Regra excluída com sucesso.",
+      );
+      setSelectedRuleIds((prev) =>
+        prev.filter((id) => !itemsToDelete.includes(id)),
+      );
+      setItemsToDelete([]);
+      await loadRules();
     } else {
-      setRules([...rules, newRule]);
-      toast.success("Regra criada com sucesso!");
+      toast.error("Ocorreu um erro ao excluir uma ou mais regras.");
     }
   };
 
-  const handleImportClick = () => fileInputRef.current?.click();
-  const handleFileChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    if (event.target.files?.[0])
-      toast.success("Arquivo importado com sucesso!");
+  // 📤 EXPORTAR REGRAS PARA ARQUIVO JSON
+  const handleImportClick = () => {
+    // Pequeno atraso para o menu fechar sem bloquear a janela de arquivos do navegador
+    setTimeout(() => {
+      fileInputRef.current?.click();
+    }, 100);
   };
 
-  const toggleRuleStatus = (id: string) => {
-    setRules(
-      rules.map((rule) =>
-        rule.id === id ? { ...rule, status: !rule.status } : rule,
-      ),
-    );
-    toast.success("Status atualizado.");
+  const handleFileChange = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = async (e) => {
+      try {
+        const content = e.target?.result as string;
+        const parsed = JSON.parse(content);
+        const importedRules = Array.isArray(parsed) ? parsed : [parsed];
+
+        if (importedRules.length === 0) {
+          toast.error("O arquivo de importação está vazio.");
+          return;
+        }
+
+        let successCount = 0;
+        let failCount = 0;
+
+        toast.info(`Importando ${importedRules.length} regra(s)...`);
+
+        for (const item of importedRules) {
+          if (!item.name || !item.action) {
+            failCount++;
+            continue;
+          }
+
+          let parsedConditions = item.conditions;
+          if (typeof item.conditions === "string") {
+            try {
+              parsedConditions = JSON.parse(item.conditions);
+            } catch {
+              parsedConditions = [];
+            }
+          }
+
+          const res = await createRuleAction({
+            workspaceId,
+            userId,
+            name: item.name,
+            product: item.product || null,
+            adAccounts: item.adAccounts || [],
+            applyTo: item.applyTo || "active_campaigns",
+            filterByName: item.filterByName || null,
+            action: item.action,
+            actionValue: item.actionValue ?? null,
+            actionUnit: item.actionUnit ?? null,
+            budgetLimit: item.budgetLimit ?? null,
+            metricsLevel: item.metricsLevel || "campaign",
+            conditions: parsedConditions || [],
+            evaluationPeriod: item.evaluationPeriod || "today",
+            frequency: item.frequency || "15min",
+            executionWindow: item.executionWindow || null,
+            dailyLimit: item.dailyLimit ?? null,
+          });
+
+          if (res.success) {
+            successCount++;
+          } else {
+            failCount++;
+          }
+        }
+
+        if (successCount > 0) {
+          toast.success(`${successCount} regra(s) importada(s) com sucesso!`);
+          await loadRules();
+        }
+
+        if (failCount > 0) {
+          toast.error(`${failCount} falha(s) na importação.`);
+        }
+      } catch (err) {
+        console.error("Erro ao ler JSON de importação:", err);
+        toast.error("Formato de arquivo inválido. Envie um JSON válido.");
+      } finally {
+        if (fileInputRef.current) {
+          fileInputRef.current.value = "";
+        }
+      }
+    };
+
+    reader.readAsText(file);
   };
 
-  const handleSelectAll = (checked: boolean) => {
-    setSelectedRuleIds(checked ? rules.map((r) => r.id) : []);
+  // 📤 EXPORTAR REGRAS PARA ARQUIVO JSON
+  const handleExport = () => {
+    // Se houver regras selecionadas na tabela, exporta apenas elas. Senão, exporta todas.
+    const rulesToExport =
+      selectedRuleIds.length > 0
+        ? rules.filter((r) => selectedRuleIds.includes(r.id))
+        : rules;
+
+    if (rulesToExport.length === 0) {
+      toast.error("Nenhuma regra disponível para exportar.");
+      return;
+    }
+
+    const exportData = rulesToExport.map((rule) => {
+      const raw = (rule.rawConfig || {}) as Record<string, unknown>;
+      return {
+        name: rule.name,
+        product: raw.product ?? null,
+        adAccounts: raw.adAccounts ?? [],
+        applyTo: raw.applyTo ?? "active_campaigns",
+        filterByName: raw.filterByName ?? null,
+        action: raw.action,
+        actionValue: raw.actionValue ?? null,
+        actionUnit: raw.actionUnit ?? null,
+        budgetLimit: raw.budgetLimit ?? null,
+        metricsLevel: raw.metricsLevel ?? "campaign",
+        conditions: raw.conditions ?? rule.conditions ?? [],
+        evaluationPeriod: raw.evaluationPeriod ?? "today",
+        frequency: rule.frequency,
+        executionWindow: raw.executionWindow ?? null,
+        dailyLimit: raw.dailyLimit ?? null,
+      };
+    });
+
+    const jsonString = JSON.stringify(exportData, null, 2);
+    const blob = new Blob([jsonString], { type: "application/json" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `regras-meta-scale-${new Date().toISOString().slice(0, 10)}.json`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
+
+    toast.success(`${rulesToExport.length} regra(s) exportada(s) com sucesso!`);
   };
 
-  const handleSelectOne = (id: string, checked: boolean) => {
-    setSelectedRuleIds(
-      checked
-        ? [...selectedRuleIds, id]
-        : selectedRuleIds.filter((itemId) => itemId !== id),
-    );
-  };
-
-  const confirmSingleDelete = (id: string) => setItemsToDelete([id]);
   const confirmBulkDelete = () => {
     if (selectedRuleIds.length === 0) {
       toast.error("Nenhuma regra selecionada.");
@@ -212,35 +470,35 @@ export default function RegrasPage() {
     setItemsToDelete(selectedRuleIds);
   };
 
-  const executeDelete = () => {
-    setRules(rules.filter((r) => !itemsToDelete.includes(r.id)));
-    setSelectedRuleIds(
-      selectedRuleIds.filter((id) => !itemsToDelete.includes(id)),
-    );
-    setItemsToDelete([]);
-    toast.success(
-      itemsToDelete.length > 1
-        ? "Regras excluídas com sucesso."
-        : "Regra excluída com sucesso.",
-    );
-  };
+  const filteredRules = useMemo(() => {
+    return rules.filter((rule) => {
+      const matchesSearch = rule.name
+        .toLowerCase()
+        .includes(searchTerm.toLowerCase());
+      return matchesSearch;
+    });
+  }, [rules, searchTerm]);
 
-  const filteredRules = rules.filter((rule) =>
-    rule.name.toLowerCase().includes(searchTerm.toLowerCase()),
+  const columns = useMemo(
+    () =>
+      getColumns({
+        onToggleStatus: toggleRuleStatus,
+        onEdit: openEditModal,
+        onDelete: confirmSingleDelete,
+      }),
+    [toggleRuleStatus, openEditModal, confirmSingleDelete],
   );
-  const isAllSelected =
-    filteredRules.length > 0 && selectedRuleIds.length === filteredRules.length;
 
   return (
-    <div className="flex flex-col h-screen w-full bg-background overflow-hidden relative">
+    <div className="flex flex-col h-screen w-full overflow-hidden relative">
       <div className="sticky top-0 shrink-0 w-full px-6 pt-6 pb-4 border-b border-border/30 transition-all backdrop-blur-md shadow-sm z-30">
         <MarketingHeader
           user={currentUser}
-          showValues={true} // 🔥 Força a exibição dos números
-          setShowValues={() => {}} // Função vazia só para cumprir a tipagem
+          showValues={true}
+          setShowValues={() => {}}
           isEditing={false}
           setIsEditing={() => {}}
-          hideControls={true} // Mantém o olho escondido
+          hideControls={true}
           onSave={() => {}}
           onReset={() => {}}
         />
@@ -251,14 +509,13 @@ export default function RegrasPage() {
           type="file"
           ref={fileInputRef}
           className="hidden"
-          accept=".json,.csv"
+          accept=".json"
           onChange={handleFileChange}
         />
 
         <PremiumCard className="w-full h-full flex flex-col overflow-hidden relative z-0 p-0 shadow-sm rounded-xl">
           <Tabs defaultValue="meta" className="w-full h-full flex flex-col">
-            {/* 🔥 TABS HEADER COM ESTILO PREMIUM DA IMAGEM 4 */}
-            <div className="shrink-0 border-b border-border/40 w-full relative z-10 px-4 bg-transparent">
+            <div className="shrink-0 border-b border-border/40 w-full relative z-10 px-0 bg-transparent">
               <TabsList className="bg-transparent border-none w-full flex justify-start rounded-none p-0 h-auto">
                 <TabsTrigger
                   value="meta"
@@ -359,7 +616,10 @@ export default function RegrasPage() {
                       >
                         <Upload size={14} /> Importar
                       </DropdownMenuItem>
-                      <DropdownMenuItem className="gap-2 cursor-pointer text-xs focus:bg-accent focus:text-accent-foreground">
+                      <DropdownMenuItem
+                        onClick={handleExport}
+                        className="gap-2 cursor-pointer text-xs focus:bg-accent focus:text-accent-foreground"
+                      >
                         <Download size={14} /> Exportar Meta
                       </DropdownMenuItem>
                       <DropdownMenuSeparator className="bg-border" />
@@ -372,157 +632,43 @@ export default function RegrasPage() {
                     </DropdownMenuContent>
                   </DropdownMenu>
 
-                  {/* 🔥 CHAMA O openCreateModal */}
-                  <Button
-                    size="sm"
-                    className="h-9 gap-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-medium px-4 rounded-md shadow-sm"
-                    onClick={openCreateModal}
-                  >
-                    <Plus size={14} /> Criar regra
-                  </Button>
+                  <TooltipProvider delayDuration={200}>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <div>
+                          <Button
+                            size="sm"
+                            onClick={openCreateModal}
+                            disabled={isLimitReached}
+                            className="group/btn relative overflow-hidden px-5 w-36 h-9 rounded-md text-white border border-blue-500/50 bg-gradient-to-tr from-blue-600 to-blue-500 shadow-lg hover:shadow-2xl hover:shadow-blue-500/40 hover:scale-105 active:scale-95 transition-all duration-300 flex items-center justify-center disabled:opacity-80 cursor-pointer"
+                          >
+                            <div className="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent -translate-x-full group-hover/btn:translate-x-full transition-transform duration-0 group-hover/btn:duration-[1200ms] ease-out" />
+                            <Plus size={14} /> Criar regra
+                          </Button>
+                        </div>
+                      </TooltipTrigger>
+                      {isLimitReached && (
+                        <TooltipContent
+                          side="bottom"
+                          className="bg-zinc-900 border-zinc-800 text-white text-xs p-2"
+                        >
+                          {maxRules === 0
+                            ? "Seu plano atual (START) não possui regras automatizadas. Faça upgrade para utilizar."
+                            : `Você atingiu o limite de ${maxRules} regras do plano ${currentUser.plan}.`}
+                        </TooltipContent>
+                      )}
+                    </Tooltip>
+                  </TooltipProvider>
                 </div>
               </div>
 
-              <div className="flex-1 overflow-auto bg-transparent relative w-full custom-scrollbar">
-                <table className="w-full text-left text-xs text-muted-foreground">
-                  <thead className="bg-transparent sticky top-0 z-10 text-[11px] uppercase font-bold tracking-wider text-muted-foreground border-b border-border/40 backdrop-blur-md">
-                    <tr>
-                      <th className="px-4 py-3 w-[40px] text-center">
-                        <Checkbox
-                          checked={isAllSelected}
-                          onCheckedChange={(val) => handleSelectAll(!!val)}
-                          className="translate-y-[2px]"
-                        />
-                      </th>
-                      <th className="px-6 py-3 w-[60px] text-center">Status</th>
-                      <th className="px-6 py-3">Nome e Produto</th>
-                      <th className="px-6 py-3">Aplicada A</th>
-                      <th className="px-6 py-3">Ação e Condição</th>
-                      <th className="px-6 py-3">Frequência e Período</th>
-                      <th className="px-6 py-3 text-right pr-8">Ações</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-border/20">
-                    {filteredRules.length > 0 ? (
-                      filteredRules.map((rule) => (
-                        <tr
-                          key={rule.id}
-                          className={cn(
-                            "hover:bg-muted/20 transition-colors group",
-                            selectedRuleIds.includes(rule.id) && "bg-muted/30",
-                          )}
-                        >
-                          <td className="px-4 py-4 text-center">
-                            <Checkbox
-                              checked={selectedRuleIds.includes(rule.id)}
-                              onCheckedChange={(val) =>
-                                handleSelectOne(rule.id, !!val)
-                              }
-                              className="translate-y-[2px]"
-                            />
-                          </td>
-                          <td className="px-6 py-4 text-center">
-                            <Switch
-                              checked={rule.status}
-                              onCheckedChange={() => toggleRuleStatus(rule.id)}
-                              className="scale-75 data-[state=checked]:bg-blue-600"
-                            />
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex flex-col gap-0.5">
-                              <span className="text-sm font-medium text-foreground">
-                                {rule.name}
-                              </span>
-                              <span className="text-[11px] text-muted-foreground">
-                                Produto: {rule.product}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <span className="bg-blue-100 dark:bg-blue-500/10 text-blue-700 dark:text-blue-400 px-2.5 py-1 rounded-md border border-blue-200 dark:border-blue-500/20 font-medium whitespace-nowrap text-[11px]">
-                              {rule.scope}
-                            </span>
-                            <div className="text-[10px] mt-1 text-muted-foreground">
-                              Conta: {rule.account}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex flex-col gap-1">
-                              <span
-                                className={cn(
-                                  "font-medium",
-                                  rule.action.toLowerCase().includes("pausar")
-                                    ? "text-orange-600 dark:text-orange-400"
-                                    : "text-emerald-700 dark:text-emerald-400",
-                                )}
-                              >
-                                {rule.action}
-                              </span>
-                              <span className="text-muted-foreground font-mono text-[11px] bg-muted/50 px-2 py-0.5 rounded border border-border/40 w-fit">
-                                SE: {rule.conditions}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4">
-                            <div className="flex flex-col text-foreground">
-                              <span>{rule.frequency}</span>
-                              <span className="text-[10px] text-muted-foreground">
-                                Base: {rule.period}
-                              </span>
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 text-right pr-8">
-                            <DropdownMenu>
-                              <DropdownMenuTrigger asChild>
-                                <Button
-                                  variant="ghost"
-                                  size="icon"
-                                  className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                                >
-                                  <MoreHorizontal size={16} />
-                                </Button>
-                              </DropdownMenuTrigger>
-                              <DropdownMenuContent
-                                align="end"
-                                className="w-40 bg-popover border-border text-popover-foreground shadow-md rounded-md"
-                              >
-                                {/* 🔥 CHAMA O openEditModal */}
-                                <DropdownMenuItem
-                                  onClick={() => openEditModal(rule)}
-                                  className="text-xs cursor-pointer focus:bg-accent focus:text-accent-foreground gap-2"
-                                >
-                                  <Edit size={14} /> Editar
-                                </DropdownMenuItem>
-                                <DropdownMenuItem
-                                  onClick={() => confirmSingleDelete(rule.id)}
-                                  className="text-xs cursor-pointer text-red-600 dark:text-red-500 focus:bg-red-50 dark:focus:bg-red-950 focus:text-red-700 dark:focus:text-red-400 gap-2"
-                                >
-                                  <Trash size={14} /> Excluir
-                                </DropdownMenuItem>
-                              </DropdownMenuContent>
-                            </DropdownMenu>
-                          </td>
-                        </tr>
-                      ))
-                    ) : (
-                      <tr>
-                        <td colSpan={7} className="h-64 text-center">
-                          <div className="flex flex-col items-center justify-center text-muted-foreground/50 gap-2 p-10">
-                            <Filter size={32} strokeWidth={1} />
-                            <p className="text-sm font-medium">
-                              Nenhuma regra encontrada.
-                            </p>
-                            <p className="text-xs max-w-xs">
-                              Crie sua primeira regra personalizada clicando em
-                              "Criar regra" acima.
-                            </p>
-                          </div>
-                        </td>
-                      </tr>
-                    )}
-                  </tbody>
-                </table>
-              </div>
+              <RulesTable
+                columns={columns}
+                data={filteredRules}
+                onRowSelectionChange={(selectedRows) =>
+                  setSelectedRuleIds(selectedRows.map((r) => r.id))
+                }
+              />
             </TabsContent>
 
             <TabsContent
@@ -554,7 +700,13 @@ export default function RegrasPage() {
         open={isCreateModalOpen}
         onOpenChange={setIsCreateModalOpen}
         onSave={handleSaveRule}
-        initialData={ruleToEdit?.rawConfig} // 🔥 PASSANDO OS DADOS BRUTOS DA REGRA PARA O MODAL LER
+        initialData={
+          ruleToEdit?.rawConfig as React.ComponentProps<
+            typeof CreateRuleModal
+          >["initialData"]
+        }
+        workspaceId={workspaceId}
+        userId={userId}
       />
 
       <AlertDialog
