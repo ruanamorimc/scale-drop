@@ -1,10 +1,9 @@
 import { NextResponse } from "next/server";
 import { headers } from "next/headers";
-import { auth } from "@/lib/auth"; // Seu setup do BetterAuth
+import { auth } from "@/lib/auth";
 import prisma from "@/lib/prisma";
 
 export async function GET(request: Request) {
-  // 1. Verificar se o usuário está logado de forma segura no servidor
   const session = await auth.api.getSession({
     headers: await headers(),
   });
@@ -14,23 +13,17 @@ export async function GET(request: Request) {
   }
 
   const userId = session.user.id;
-
   const { searchParams } = new URL(request.url);
   const code = searchParams.get("code");
   const error = searchParams.get("error");
-
-  // 🔥 Pegamos o SLUG que enviamos através do parâmetro "state"
   const slug = searchParams.get("state");
 
-  // Garante que usa a URL do Ngrok (ou produção)
   const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || "http://localhost:3000";
 
-  // 🔥 Monta a URL de retorno com o SLUG dinâmico
   const returnUrl = slug
     ? `${baseUrl}/${slug}/settings/integrations`
     : `${baseUrl}/start`;
 
-  // Se o usuário recusou ou faltou algum dado
   if (error || !code || !slug) {
     const errorHtmlResponse = `
       <!DOCTYPE html>
@@ -59,39 +52,51 @@ export async function GET(request: Request) {
   try {
     const clientId = process.env.NEXT_PUBLIC_META_APP_ID;
     const clientSecret = process.env.META_APP_SECRET;
-
-    // A redirectUri precisa ser idêntica à que foi chamada no frontend
     const redirectUri = `${baseUrl}/api/auth/callback/facebook`;
 
     // ==========================================
-    // 1. TROCAR O CÓDIGO PELO TOKEN DE ACESSO
+    // 1. GERAR SHORT-LIVED TOKEN (2 horas)
     // ==========================================
     const tokenUrl = `https://graph.facebook.com/v19.0/oauth/access_token?client_id=${clientId}&redirect_uri=${redirectUri}&client_secret=${clientSecret}&code=${code}`;
     const tokenRes = await fetch(tokenUrl);
     const tokenData = await tokenRes.json();
 
     if (tokenData.error) {
-      console.error("Erro na Meta:", tokenData.error);
+      console.error("Erro na Meta (Short Token):", tokenData.error);
       throw new Error(tokenData.error.message);
     }
 
-    const accessToken = tokenData.access_token;
+    const shortLivedToken = tokenData.access_token;
+
+    // ==========================================
+    // 1.5. CONVERTER PARA LONG-LIVED TOKEN (60 dias)
+    // ==========================================
+    const exchangeUrl = `https://graph.facebook.com/v19.0/oauth/access_token?grant_type=fb_exchange_token&client_id=${clientId}&client_secret=${clientSecret}&fb_exchange_token=${shortLivedToken}`;
+    const exchangeRes = await fetch(exchangeUrl);
+    const exchangeData = await exchangeRes.json();
+
+    if (exchangeData.error) {
+      console.error("Erro na Meta (Long Token):", exchangeData.error);
+      throw new Error(exchangeData.error.message);
+    }
+
+    const longLivedToken = exchangeData.access_token;
 
     // ==========================================
     // 2. BUSCAR AS CONTAS DE ANÚNCIO DELE
     // ==========================================
-    const accountsUrl = `https://graph.facebook.com/v19.0/me/adaccounts?fields=name,account_id,account_status&access_token=${accessToken}`;
+    const accountsUrl = `https://graph.facebook.com/v19.0/me/adaccounts?fields=name,account_id,account_status&access_token=${longLivedToken}`;
     const accountsRes = await fetch(accountsUrl);
     const accountsData = await accountsRes.json();
 
     const adAccounts = accountsData.data || [];
 
     // ==========================================
-    // 3. SALVAR TUDO NO BANCO DE DADOS (PRISMA)
+    // 3. SALVAR O TOKEN DE 60 DIAS NO USER
     // ==========================================
     await prisma.user.update({
       where: { id: userId },
-      data: { metaAccessToken: accessToken },
+      data: { metaAccessToken: longLivedToken },
     });
 
     for (const acc of adAccounts) {
@@ -111,11 +116,10 @@ export async function GET(request: Request) {
       });
     }
 
-    console.log(`✅ [META ADS] Conectado! ${adAccounts.length} contas salvas.`);
+    console.log(
+      `✅ [META ADS] Conectado! ${adAccounts.length} contas salvas com token de 60 dias.`,
+    );
 
-    // ==========================================
-    // 🔥 4. O PULO DO GATO: FECHAR O POPUP VIA HTML
-    // ==========================================
     const htmlResponse = `
       <!DOCTYPE html>
       <html>
@@ -137,11 +141,9 @@ export async function GET(request: Request) {
           <script>
             setTimeout(() => {
               if (window.opener) {
-                // Manda a mensagem para o IntegrationList fechar o load e atualizar a tela
                 window.opener.postMessage({ type: 'META_OAUTH_SUCCESS' }, '*');
                 window.close();
               } else {
-                // Fallback caso abra na mesma guia
                 window.location.href = "${returnUrl}?success=meta_connected";
               }
             }, 800);
@@ -156,9 +158,6 @@ export async function GET(request: Request) {
   } catch (error) {
     console.error("Erro interno no OAuth do Facebook:", error);
 
-    // ==========================================
-    // 🔥 5. TRATAMENTO DE ERROS (FECHA O POPUP TAMBÉM)
-    // ==========================================
     const errorHtmlResponse = `
       <!DOCTYPE html>
       <html>
