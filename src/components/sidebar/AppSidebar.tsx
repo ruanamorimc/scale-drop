@@ -21,27 +21,41 @@ export async function AppSidebar({
 
   if (!user) return null;
 
-  // 🔥 BUSCA TODOS OS WORKSPACES DO USUÁRIO NO BANCO
-  const rawWorkspaces = await prisma.workspace.findMany({
-    where: { userId: user.id },
-    orderBy: { createdAt: "asc" },
-  });
+  // 🔥 BUSCA WORKSPACES, PLANO E ROLE DO USUÁRIO NO BANCO
+  const [rawWorkspaces, dbUser] = await Promise.all([
+    prisma.workspace.findMany({
+      where: { userId: user.id },
+      orderBy: { createdAt: "asc" },
+    }),
+    prisma.user.findUnique({
+      where: { id: user.id },
+      select: { plan: true, role: true },
+    }),
+  ]);
 
-  // 🔥 BLINDAGEM: Limpamos os dados do Prisma, removendo as Datas para evitar falha no Client Component
   const safeWorkspaces = rawWorkspaces.map((ws) => ({
     id: ws.id,
     name: ws.name,
     slug: ws.slug,
   }));
 
-  // O fallback continua sendo o primeiro workspace da lista
   const fallbackSlug = safeWorkspaces.length > 0 ? safeWorkspaces[0].slug : "";
+
+  // 🔥 PRIORIDADE: Se a role for ADMIN, exibe ADMIN. Caso contrário, exibe o plano (START, SCALE, PRO)
+  const displayBadge =
+    dbUser?.role?.toUpperCase() === "ADMIN"
+      ? "ADMIN"
+      : dbUser?.plan?.toUpperCase() || "START";
+
+  const userWithPlan = {
+    ...user,
+    plan: displayBadge,
+  };
 
   return (
     <Sidebar {...props}>
       <SidebarHeader className="flex flex-row items-center justify-between pt-4 pb-2 px-2">
         <div className="flex-1">
-          {/* 🔥 Repassa os dados seguros */}
           <WorkspaceSwitcher workspaces={safeWorkspaces} />
         </div>
         <SidebarTrigger className="h-7 w-7 ml-1" />
@@ -55,7 +69,7 @@ export async function AppSidebar({
       </SidebarContent>
 
       <SidebarFooter>
-        <NavUser user={user} fallbackSlug={fallbackSlug} />
+        <NavUser user={userWithPlan} fallbackSlug={fallbackSlug} />
       </SidebarFooter>
     </Sidebar>
   );

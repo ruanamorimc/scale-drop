@@ -1,7 +1,8 @@
 "use client";
 
 import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { usePathname, useRouter } from "next/navigation";
+import { useTransition } from "react";
 import { cn } from "@/lib/utils";
 import { LucideIcon } from "lucide-react";
 import {
@@ -25,33 +26,53 @@ export function SidebarLink({
   exact = false,
 }: SidebarLinkProps) {
   const pathname = usePathname();
+  const router = useRouter();
+  const [isPending, startTransition] = useTransition();
 
-  // Lógica de Ativação Refinada
   const isActive = exact
-    ? pathname === url // Se exact=true, tem que ser idêntico
+    ? pathname === url
     : url === "/"
       ? pathname === "/"
       : pathname === url || pathname.startsWith(`${url}/`);
 
-  // Seleciona o componente base correto do shadcn sidebar
   const Component = isSubItem ? SidebarMenuSubButton : SidebarMenuButton;
+
+  // 🔥 PRÉ-CARREGAMENTO AO PASSAR O MOUSE (A página carrega antes do clique)
+  const handleMouseEnter = () => {
+    if (url !== "#") {
+      router.prefetch(url);
+    }
+  };
+
+  // 🔥 NAVEGAÇÃO NÃO-BLOQUEANTE (Impede o congelamento visual no clique)
+  const handleClick = (e: React.MouseEvent<HTMLAnchorElement>) => {
+    if (url === "#") return;
+
+    e.preventDefault();
+    startTransition(() => {
+      router.push(url);
+    });
+  };
 
   return (
     <Component
       asChild
       isActive={isActive}
       className={cn(
-        "relative transition-all duration-300 group cursor-pointer overflow-hidden",
-        // Estilo Base
+        "relative transition-all duration-200 group cursor-pointer overflow-hidden",
         "hover:bg-muted/50 hover:text-foreground text-muted-foreground",
-
-        // 🔥 ESTILO ATIVO (O Glow Azul + Barrinha)
-        // Aplicado para AMBOS (Item Principal e Sub-item) para manter o padrão da imagem 2
+        isPending && "opacity-70 animate-pulse",
         isActive &&
           "bg-gradient-to-r from-blue-600/20 via-blue-600/5 to-transparent text-blue-500 font-medium hover:bg-blue-600/20 hover:text-blue-400",
       )}
     >
-      <Link href={url} className="flex items-center gap-2 w-full">
+      <Link
+        href={url}
+        prefetch={true}
+        onMouseEnter={handleMouseEnter}
+        onClick={handleClick}
+        className="flex items-center gap-2 w-full"
+      >
         {Icon && (
           <Icon
             className={cn(
@@ -64,7 +85,6 @@ export function SidebarLink({
         )}
         <span className="truncate">{title}</span>
 
-        {/* 🔥 BARRINHA LATERAL BRILHANTE (Agora aparece para TODOS os itens ativos) */}
         {isActive && (
           <div className="absolute right-0 top-1/2 -translate-y-1/2 h-5 w-1 rounded-l-full bg-blue-500 shadow-[0_0_12px_2px_rgba(59,130,246,0.8)] animate-in fade-in slide-in-from-right-1 duration-300" />
         )}

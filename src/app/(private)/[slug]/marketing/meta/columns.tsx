@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
@@ -60,13 +61,42 @@ const formatPercent = (value: unknown) => {
   return `${numValue.toFixed(2)}%`;
 };
 
-// --- DEFINIÇÃO DAS 65 COLUNAS MAPEADAS DO META-METRICS ---
+// --- COMPONENTE COM RESPOSTA INSTANTÂNEA AO CLIQUE ---
+function StatusCell({
+  status,
+  id,
+  onToggleStatus,
+}: {
+  status: string | boolean;
+  id: string;
+  onToggleStatus?: (id: string, newStatus: boolean) => void;
+}) {
+  const isInitialActive = status === "ACTIVE" || status === true;
+  const [checked, setChecked] = useState(isInitialActive);
+
+  const handleToggle = (newChecked: boolean) => {
+    setChecked(newChecked); // Transição instantânea na tela (0ms)
+    if (onToggleStatus) {
+      onToggleStatus(id, newChecked); // API em segundo plano
+    }
+  };
+
+  return (
+    <div className="flex justify-center">
+      <Switch
+        checked={checked}
+        onCheckedChange={handleToggle}
+        className="scale-75"
+      />
+    </div>
+  );
+}
+
+// --- DEFINIÇÃO DAS COLUNAS MAPEADAS DO META-METRICS ---
 export const getColumns = (
   level: string = "campanhas",
+  onToggleStatus?: (id: string, newStatus: boolean) => void,
 ): ColumnDef<MetaCampaign>[] => [
-  // ==============================
-  // COLUNAS FIXAS DO SISTEMA
-  // ==============================
   // ==============================
   // COLUNAS FIXAS DO SISTEMA
   // ==============================
@@ -99,16 +129,16 @@ export const getColumns = (
     accessorKey: "status",
     header: "Status",
     cell: ({ row }) => {
-      const status = row.getValue("status");
-      const isActive = status === "ACTIVE" || status === true;
+      const status = row.getValue("status") as string | boolean;
+      const id = row.original.id;
+
       return (
-        <div className="flex items-center">
-          <Switch
-            checked={isActive}
-            // O "!bg-white" força a bolinha a ficar branca e esmaga as regras do dark mode do componente base
-            className="data-[state=checked]:bg-blue-600 [&>span]:!bg-white"
-          />
-        </div>
+        <StatusCell
+          key={`${id}-${status}`}
+          id={id}
+          status={status}
+          onToggleStatus={onToggleStatus}
+        />
       );
     },
     size: 80,

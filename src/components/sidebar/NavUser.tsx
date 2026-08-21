@@ -2,7 +2,6 @@
 
 import { authClient } from "@/lib/auth-client";
 import { cn } from "@/lib/utils";
-// 🔥 Importamos o useParams junto com o useRouter
 import { useRouter, useParams } from "next/navigation";
 import Link from "next/link";
 import { useTheme } from "next-themes";
@@ -40,7 +39,7 @@ interface UserProps {
     image?: string | null;
     plan?: string;
   };
-  fallbackSlug: string; // 🔥 Adiciona aqui na Interface
+  fallbackSlug: string;
 }
 
 export function NavUser({ user, fallbackSlug }: UserProps) {
@@ -75,23 +74,23 @@ export function NavUser({ user, fallbackSlug }: UserProps) {
     );
   };
 
-  const getPlanBadgeStyle = (planName: string) => {
+  // 🔥 SUPORTE COMPLETO: START, SCALE, PRO, ADMIN
+  const getPlanBadgeStyle = (planName: string = "START") => {
     switch (planName.toUpperCase()) {
       case "START":
-        return "bg-emerald-600 text-[10px] px-1.5 py-0.5 rounded text-white font-bold leading-none border-emerald-500/30";
+        return "bg-emerald-600/90 text-white border-emerald-500/40";
       case "SCALE":
-        return "bg-purple-600 text-[10px] px-1.5 py-0.5 rounded text-white font-bold leading-none border-purple-500/30";
+        return "bg-purple-600/90 text-white border-purple-500/40";
       case "PRO":
-        return "bg-blue-600 text-[10px] px-1.5 py-0.5 rounded text-white font-bold leading-none";
+        return "bg-blue-600/90 text-white border-blue-500/40";
+      case "ADMIN":
+        return "bg-red-600/90 text-white border-amber-500/40";
       default:
         return "bg-zinc-800 text-zinc-400 border-zinc-700";
     }
   };
 
-  const toggleTheme = (e: React.MouseEvent) => {
-    e.preventDefault();
-    setTheme(theme === "dark" ? "light" : "dark");
-  };
+  const currentPlan = user.plan || "START";
 
   return (
     <SidebarMenu>
@@ -113,11 +112,11 @@ export function NavUser({ user, fallbackSlug }: UserProps) {
                   <span className="truncate font-medium">{user.name}</span>
                   <span
                     className={cn(
-                      "px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border",
-                      getPlanBadgeStyle(user.plan || "START"),
+                      "px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border leading-none shrink-0",
+                      getPlanBadgeStyle(currentPlan),
                     )}
                   >
-                    {user.plan || "START"}
+                    {currentPlan}
                   </span>
                 </div>
                 <span className="text-muted-foreground truncate text-xs">
@@ -127,6 +126,7 @@ export function NavUser({ user, fallbackSlug }: UserProps) {
               <IconDotsVertical className="ml-auto size-4" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
+
           <DropdownMenuContent
             className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
             side={isMobile ? "bottom" : "right"}
@@ -146,11 +146,11 @@ export function NavUser({ user, fallbackSlug }: UserProps) {
                     <span className="truncate font-medium">{user.name}</span>
                     <span
                       className={cn(
-                        "px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border",
-                        getPlanBadgeStyle(user.plan || "START"),
+                        "px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider border leading-none shrink-0",
+                        getPlanBadgeStyle(currentPlan),
                       )}
                     >
-                      {user.plan || "START"}
+                      {currentPlan}
                     </span>
                   </div>
 
@@ -185,14 +185,12 @@ export function NavUser({ user, fallbackSlug }: UserProps) {
 
             <DropdownMenuGroup>
               <DropdownMenuItem asChild>
-                {/* 🔥 Adicionamos o slug aqui */}
                 <Link href={`/${slug}/settings`}>
                   <IconUserCircle />
                   Perfil
                 </Link>
               </DropdownMenuItem>
               <DropdownMenuItem asChild>
-                {/* 🔥 E aqui também */}
                 <Link href={`/${slug}/settings/billing`}>
                   <IconCreditCard />
                   Cobrança

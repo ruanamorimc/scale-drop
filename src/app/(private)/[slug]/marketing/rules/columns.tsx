@@ -1,5 +1,6 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import { AutomationRule } from "./types";
 import { Checkbox } from "@/components/ui/checkbox";
@@ -14,7 +15,6 @@ import {
 } from "@/components/ui/dropdown-menu";
 import { cn } from "@/lib/utils";
 
-// 1. Tradução e formatação das métricas e valores
 // 1. Tradução e formatação completa das métricas e operadores
 export function formatCondition(
   metric: string,
@@ -23,7 +23,6 @@ export function formatCondition(
 ) {
   const numValue = Number(value) || 0;
 
-  // Mapa universal de operadores
   const operatorMap: Record<string, string> = {
     ">": ">",
     "<": "<",
@@ -45,7 +44,6 @@ export function formatCondition(
     .replace(/\s+/g, "_");
 
   switch (key) {
-    // 💵 MOEDA (R$)
     case "SPENT":
     case "GASTO":
       return `Gasto ${opText} R$ ${numValue.toFixed(2)}`;
@@ -62,8 +60,6 @@ export function formatCondition(
       return `Orçamento ${opText} R$ ${numValue.toFixed(2)}`;
     case "CPM":
       return `CPM ${opText} R$ ${numValue.toFixed(2)}`;
-
-    // 🔢 NÚMERO ABSOLUTO (Sem R$)
     case "PURCHASES":
     case "VENDAS":
     case "COMPRAS":
@@ -75,20 +71,15 @@ export function formatCondition(
     case "CLICKS":
     case "CLIQUES":
       return `Cliques ${opText} ${numValue}`;
-
-    // 📊 PORCENTAGEM (%)
     case "PROFIT_MARGIN":
     case "MARGEM_DE_LUCRO":
       return `Margem de Lucro ${opText} ${numValue}%`;
     case "CTR":
       return `CTR ${opText} ${numValue}%`;
-
-    // ✖️ MULTIPLICADOR (x)
     case "ROI":
       return `ROI ${opText} ${numValue}x`;
     case "ROAS":
       return `ROAS ${opText} ${numValue}x`;
-
     default:
       return `${metric} ${opText} ${numValue}`;
   }
@@ -150,8 +141,6 @@ interface ConditionItem {
   value: number | string;
 }
 
-// Função Auxiliar para renderizar a lista de condições (trata Array, JSON e String)
-// 2. Auxiliar para renderizar a coluna "SE: ..."
 function renderConditions(conditions: unknown) {
   if (!conditions) return "-";
 
@@ -165,10 +154,10 @@ function renderConditions(conditions: unknown) {
       if (Array.isArray(parsed)) {
         items = parsed;
       } else {
-        return conditions; // Fallback para strings legadas antigas
+        return conditions;
       }
     } catch {
-      return conditions; // String legada antiga
+      return conditions;
     }
   }
 
@@ -179,6 +168,32 @@ function renderConditions(conditions: unknown) {
   }
 
   return String(conditions);
+}
+
+// Componente isolado para o Switch responder instantaneamente ao clique (Optimistic UI)
+function StatusCell({
+  rule,
+  onToggleStatus,
+}: {
+  rule: AutomationRule;
+  onToggleStatus: (id: string) => void;
+}) {
+  const [checked, setChecked] = useState(rule.status);
+
+  const handleToggle = (newChecked: boolean) => {
+    setChecked(newChecked); // Resposta imediata na tela (0ms de atraso)
+    onToggleStatus(rule.id); // Executa a API em segundo plano
+  };
+
+  return (
+    <div className="flex justify-center">
+      <Switch
+        checked={checked}
+        onCheckedChange={handleToggle}
+        className="scale-75"
+      />
+    </div>
+  );
 }
 
 interface ColumnActionsProps {
@@ -219,18 +234,13 @@ export const getColumns = ({
   {
     accessorKey: "status",
     header: () => <div className="text-center">Status</div>,
-    cell: ({ row }) => {
-      const rule = row.original;
-      return (
-        <div className="flex justify-center">
-          <Switch
-            checked={rule.status}
-            onCheckedChange={() => onToggleStatus(rule.id)}
-            className="scale-75 data-[state=checked]:bg-blue-600"
-          />
-        </div>
-      );
-    },
+    cell: ({ row }) => (
+      <StatusCell
+        key={`${row.original.id}-${row.original.status}`}
+        rule={row.original}
+        onToggleStatus={onToggleStatus}
+      />
+    ),
   },
   {
     accessorKey: "name",
@@ -272,14 +282,12 @@ export const getColumns = ({
     cell: ({ row }) => {
       const rule = row.original;
 
-      // 🟢 Formata a Ação com Valor (ex: "Aumentar Orçamento (30%)")
       const formattedAction = formatActionLabel(
         rule.action,
         rule.actionValue,
         rule.actionUnit,
       );
 
-      // 🟢 Formata a Condição SE
       const formattedConditions = renderConditions(rule.conditions);
 
       const isPause =
@@ -311,7 +319,6 @@ export const getColumns = ({
     cell: ({ row }) => {
       const rule = row.original;
 
-      // 🟢 Traduz Frequência e Período
       const formattedFreq = formatFrequencyLabel(rule.frequency);
       const formattedPeriod = formatPeriodLabel(rule.period);
 

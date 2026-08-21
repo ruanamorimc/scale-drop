@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import { ColumnDef } from "@tanstack/react-table";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Switch } from "@/components/ui/switch";
@@ -57,9 +58,40 @@ const formatPercent = (value: number) => {
   return `${value.toFixed(2)}%`;
 };
 
+function StatusCell({
+  status,
+  id,
+  onToggleStatus,
+}: {
+  status: string | boolean;
+  id: string;
+  onToggleStatus?: (id: string, newStatus: boolean) => void;
+}) {
+  const isInitialActive = status === "ACTIVE" || status === true;
+  const [checked, setChecked] = useState(isInitialActive);
+
+  const handleToggle = (newChecked: boolean) => {
+    setChecked(newChecked); // Transição instantânea na tela (0ms)
+    if (onToggleStatus) {
+      onToggleStatus(id, newChecked); // API em segundo plano
+    }
+  };
+
+  return (
+    <div className="flex items-center">
+      <Switch
+        checked={checked}
+        onCheckedChange={handleToggle}
+        className="scale-75"
+      />
+    </div>
+  );
+}
+
 // --- DEFINIÇÃO DAS COLUNAS (Tornei uma função para aceitar o nível dinâmico se precisar no futuro) ---
 export const getColumns = (
   level: string = "campanhas",
+  onToggleStatus?: (id: string, newStatus: boolean) => void,
 ): ColumnDef<MetaCampaign>[] => [
   // ==============================
   // 1. COLUNAS FIXAS
@@ -90,12 +122,16 @@ export const getColumns = (
     accessorKey: "status",
     header: "Status",
     cell: ({ row }) => {
-      const status = row.getValue("status");
-      const isActive = status === "ACTIVE" || status === true;
+      const status = row.getValue("status") as string | boolean;
+      const id = row.original.id;
+
       return (
-        <div className="flex items-center">
-          <Switch checked={isActive} />
-        </div>
+        <StatusCell
+          key={`${id}-${status}`}
+          id={id}
+          status={status}
+          onToggleStatus={onToggleStatus}
+        />
       );
     },
     size: 80,
@@ -117,7 +153,7 @@ export const getColumns = (
         >
           {row.getValue("name")}
         </span>
-{/*         <span className="text-[10px] text-muted-foreground">
+        {/*         <span className="text-[10px] text-muted-foreground">
           {row.original.id}
         </span> */}
       </div>
